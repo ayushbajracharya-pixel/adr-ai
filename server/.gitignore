@@ -1,0 +1,29 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+*.log
+
+# Virtual environments
+.venv/
+.env
+.envrc
+.python-version
+
+# Docker
+*.pid
+*.seed
+*.swp
+docker-compose.override.yml
+
+# Editor/IDE
+.vscode/
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
