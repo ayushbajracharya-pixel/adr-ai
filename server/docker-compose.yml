@@ -6,6 +6,15 @@ services:
       - "8000:8000"
     volumes:
       - ./app:/app/app
+      - ./data:/data
     env_file:
       - .env
     command: poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  chromadb:
+    image: chromadb/chroma
+    container_name: chromadb_server
+    volumes:
+      - ./data/chroma_db:/data  # Persists the data in your local 'data' folder
+    ports:
+      - "8001:8000"   # Maps host port 8001 to container port 8000

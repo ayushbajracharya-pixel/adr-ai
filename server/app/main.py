@@ -1,7 +1,7 @@
 from fastapi import FastAPI, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from app.services.adr_service import ADRService
-# from app.models.schemas import QueryRequest, QueryResponse
+from app.models.schemas import QueryRequest, QueryResponse
 # import os
 
 app = FastAPI(title="ADR AI Assistant")
@@ -32,11 +32,11 @@ async def upload(file: UploadFile):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# @app.post("/query", response_model=QueryResponse)
-# async def query_adrs(request: QueryRequest):
-#     """Query ADRs for GenAI implementations"""
-#     try:
-#         response = await adr_service.query_implementations(request.query)
-#         return response
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=str(e))
+@app.post("/query")
+async def query_adrs(request: QueryRequest):
+    """Query ADRs for GenAI implementations"""
+    try:
+        response = await adr_service.query_adr(request.query)
+        return response
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
