@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.13-slim
 
 # Install Poetry
 RUN pip install poetry
@@ -9,14 +9,16 @@ WORKDIR /app
 # Copy pyproject + lock first (better caching)
 COPY pyproject.toml poetry.lock* /app/
 
-# Install deps
-RUN poetry install --no-root --only main
+# Install dependencies and debugpy
+RUN poetry install --no-root --only main && \
+    poetry add debugpy
 
 # Copy app code
 COPY ./app ./app
 
-# Expose FastAPI port
+# Expose the FastAPI port
 EXPOSE 8000
 
-# Run via Poetry
+# The default command to run the application
+# This will be overridden by the 'command' in your docker-compose.yml for debugging
 CMD ["poetry", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
