@@ -384,7 +384,13 @@ class ADRService:
         base_prompt += """
 
         INSTRUCTIONS:
-        ... (insert your detailed instructions here, same as your original prompt)
+        Based on the provided context, generate a detailed and comprehensive answer to the user's query.
+        Format the entire response as a single, valid HTML block. Do not include any text outside of the HTML tags.
+        Use appropriate HTML tags for headings (<h2>, <h3>), paragraphs (<p>), lists (<ul>, <li>), and bolding (<b> or <strong>).
+        Ensure the response is clean and ready to be rendered in a web browser.
+
+        If no relevant ADRs are found in the context, your response should be a simple HTML paragraph:
+        <p>Sorry, there has been such implementations.</p>
         """
         return ChatPromptTemplate.from_template(base_prompt)
 

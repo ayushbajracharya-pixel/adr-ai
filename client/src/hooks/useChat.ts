@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { chatApi, QueryRequest, QueryResponse } from '@/lib/api';
 import { useState } from 'react';
+import { sanitizeHtml } from '@/lib/utils';
 
 export interface ChatMessage {
   id: string;
@@ -33,7 +34,7 @@ export const useChat = () => {
       const assistantMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         type: 'assistant',
-        content: data.response,
+        content: sanitizeHtml(data.response) ,
         timestamp: new Date(),
         references: data.references,
       };
