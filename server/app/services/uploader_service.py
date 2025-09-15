@@ -96,6 +96,41 @@ class UploaderService:
             print(f"Error uploading object: {e}")
             return False
 
+    def list_files(self):
+        """
+        Lists all files in the S3 bucket.
+        Returns a list of dictionaries with file details.
+        """
+        try:
+            response = self.s3_client.list_objects_v2(Bucket=self.bucket_name)
+
+            # Check if the bucket is empty
+            if "Contents" not in response:
+                return []
+
+            files = []
+            for obj in response["Contents"]:
+                object_key = obj["Key"]
+                public_url = self._get_public_url(object_key)
+
+                # Exclude the "adr_uploads/" folder itself if it's listed
+                if object_key.endswith("/"):
+                    continue
+
+                files.append(
+                    {
+                        "object_key": object_key,
+                        "filename": object_key.split("/")[-1],
+                        "size_bytes": obj["Size"],
+                        "last_modified": obj["LastModified"],
+                        "permanent_url": public_url,
+                    }
+                )
+            return files
+        except Exception as e:
+            print(f"Error listing files: {e}")
+            return None
+
     def _set_public_read_policy(self):
         """Sets a public read bucket policy. For AWS S3."""
         policy = {
