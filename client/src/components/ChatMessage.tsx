@@ -49,9 +49,15 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
               </div>
               <div className="flex flex-wrap gap-2">
                 {message.references.map((ref, index) => (
-                  <Badge key={index} variant="secondary" className="text-xs">
-                    {ref.filename}
-                  </Badge>
+                  <a
+                    href={ref.public_url}
+                    target="_blank"
+                    key={`${ref.public_url}_${index}`}
+                  >
+                    <Badge variant="secondary" className="text-xs">
+                      {ref.filename}
+                    </Badge>
+                  </a>
                 ))}
               </div>
             </div>

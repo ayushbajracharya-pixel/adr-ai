@@ -1,28 +1,34 @@
 from langchain_openai import OpenAIEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
-import chromadb
-
-from langchain.schema import Document
-import pypdfium2 as pdfium
-import tempfile
-import os
-import docx
-import re
-from typing import Dict, List, Optional
-
-from app.models.schemas import QueryIntent
-from app.services.intent_service import get_intent_extraction_chain
-from app.services.retrieval_service import get_hybrid_retriever
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough
+import chromadb
+
+from langchain.schema import Document
+import pypdfium2 as pdfium
+import docx
+import re
+from io import BytesIO
+from typing import Dict, List, Optional
+from botocore.exceptions import ClientError, NoCredentialsError
+
+from app.config.settings import settings
+from app.models.schemas import QueryIntent
+from app.services.intent_service import get_intent_extraction_chain
+from app.services.retrieval_service import get_hybrid_retriever
+from app.services.uploader_service import UploaderService
+
+
+# Initialize your UploaderService. It will automatically use the settings.
+uploader_service = UploaderService()
 
 
 class ADRService:
     def __init__(self):
-        self.embeddings = OpenAIEmbeddings(openai_api_key=os.getenv("OPENAI_API_KEY"))
+        self.embeddings = OpenAIEmbeddings(openai_api_key=settings.OPENAI_API_KEY)
         self.client = chromadb.HttpClient(host="chromadb", port=8000)
         self.vector_store = Chroma(
             client=self.client,
@@ -33,7 +39,7 @@ class ADRService:
         self.llm = ChatOpenAI(
             model="gpt-4.1-nano",
             temperature=0.1,
-            openai_api_key=os.getenv("OPENAI_API_KEY"),
+            openai_api_key=settings.OPENAI_API_KEY,
         )
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=1000, chunk_overlap=200, separators=["\n\n", "\n", ". ", " "]
@@ -42,20 +48,34 @@ class ADRService:
 
     async def process_adr(self, file):
         """Process uploaded ADR and add to knowledge base"""
-        # Save uploaded file temporarily
-        with tempfile.NamedTemporaryFile(
-            delete=False, suffix=f".{file.filename.split('.')[-1]}"
-        ) as tmp:
-            content = await file.read()
-            tmp.write(content)
-            tmp_path = tmp.name
+
+        # Define the S3 object name (e.g., in a 'raw_uploads' folder)
+        s3_object_name = f"adr_uploads/{file.filename}"
 
         try:
+            content = await file.read()
+
+            # Create an in-memory file-like object from the content.
+            file_obj = BytesIO(content)
+
+            # Use the UploaderService to upload the in-memory object directly to S3.
+            uploadResponse = uploader_service.upload_fileobj(file_obj, s3_object_name)
+            s3_uri = uploadResponse["s3_uri"]
+            public_url = uploadResponse["public_url"]
+
+            if not s3_uri:
+                print("Failed to upload file to S3.")
+                return None  # Or handle the error as appropriate
+
+            print(f"Successfully uploaded {file.filename} to S3.")
+
             # Extract text using pypdfium2 or other extractors
-            text_content = self._extract_text_from_file(tmp_path, file.filename)
+            text_content = self._extract_text_from_file_content(content, file.filename)
 
             # Extract metadata
-            metadata = self._extract_adr_metadata(text_content, file.filename)
+            metadata = self._extract_adr_metadata(
+                text_content, file.filename, public_url, s3_uri
+            )
 
             # Create document with metadata
             document = Document(page_content=text_content, metadata=metadata)
@@ -72,8 +92,10 @@ class ADRService:
             # Return all document IDs
             return doc_ids
 
-        finally:
-            os.unlink(tmp_path)
+        except (ClientError, NoCredentialsError) as e:
+            # Handle errors related to S3 operations
+            print(f"S3 upload error: {e}")
+            return None
 
     async def query_adr(self, query: str) -> Dict:
         """
@@ -123,9 +145,17 @@ class ADRService:
         # Combine the generated response and references
         return {"query": query, "response": response_text, "references": references}
 
-    def _extract_adr_metadata(self, text: str, filename: str) -> dict:
+    def _extract_adr_metadata(
+        self, text: str, filename: str, public_url: str, s3_uri: str
+    ) -> dict:
         """Extract metadata from ADR content - works with both markdown and flattened PDF/DOCX text"""
-        metadata = {"filename": filename, "source": filename, "document_type": "ADR"}
+        metadata = {
+            "filename": filename,
+            "source": filename,
+            "document_type": "ADR",
+            "public_url": public_url,
+            "s3_uri": s3_uri,
+        }
 
         # Clean up text - handle both \n and actual newlines
         text_clean = text.replace("\\n", "\n")
@@ -296,10 +326,11 @@ class ADRService:
 
         return list(found_techs)
 
-    def _extract_text_from_pdf(self, file_path: str) -> str:
-        """Extract text from PDF using pypdfium2"""
+    def _extract_text_from_pdf(self, file_obj: BytesIO) -> str:
+        """Extract text from PDF using pypdfium2 from an in-memory object."""
         try:
-            pdf = pdfium.PdfDocument(file_path)
+            # pypdfium2's PdfDocument can directly accept a file-like object (BytesIO)
+            pdf = pdfium.PdfDocument(file_obj)
             text_content = []
 
             for page_num in range(len(pdf)):
@@ -318,10 +349,11 @@ class ADRService:
         except Exception as e:
             raise Exception(f"Failed to extract PDF text: {str(e)}")
 
-    def _extract_text_from_docx(self, file_path: str) -> str:
-        """Extract text from Word document"""
+    def _extract_text_from_docx(self, file_obj: BytesIO) -> str:
+        """Extract text from Word document from an in-memory object."""
         try:
-            doc = docx.Document(file_path)
+            # python-docx's Document can also accept a file-like object
+            doc = docx.Document(file_obj)
             text_content = []
 
             for paragraph in doc.paragraphs:
@@ -333,18 +365,24 @@ class ADRService:
         except Exception as e:
             raise Exception(f"Failed to extract Word document text: {str(e)}")
 
-    def _extract_text_from_file(self, file_path: str, filename: str) -> str:
-        """Extract text based on file extension"""
+    def _extract_text_from_file_content(
+        self, file_content: bytes, filename: str
+    ) -> str:
+        """Extract text based on file extension from in-memory content."""
 
         file_ext = filename.lower().split(".")[-1]
 
+        # Create an in-memory file object from the binary content.
+        # This is a key step to make file-path-based libraries work.
+        file_obj = BytesIO(file_content)
+
         if file_ext == "pdf":
-            return self._extract_text_from_pdf(file_path)
+            return self._extract_text_from_pdf(file_obj)
         elif file_ext in ["docx", "doc"]:
-            return self._extract_text_from_docx(file_path)
+            return self._extract_text_from_docx(file_obj)
         elif file_ext in ["txt", "md"]:
-            with open(file_path, "r", encoding="utf-8") as f:
-                return f.read()
+            # For text files, we can just decode the bytes directly.
+            return file_content.decode("utf-8")
         else:
             raise Exception(f"Unsupported file format: {file_ext}")
 
@@ -426,6 +464,8 @@ class ADRService:
                 "author": metadata.get("author", "Unknown"),
                 "date": metadata.get("date", "Unknown"),
                 "source": metadata.get("source", "N/A"),
+                "public_url": metadata.get("public_url", "Unknown"),
+                "s3_uri": metadata.get("s3_uri", "Unknown"),
             }
             references.append(ref)
         return references
