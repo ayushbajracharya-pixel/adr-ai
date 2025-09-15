@@ -2,7 +2,8 @@ from fastapi import FastAPI, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from app.services.adr_service import ADRService
 from app.models.schemas import QueryRequest
-# import os
+
+from app.services.uploader_service import UploaderService
 
 app = FastAPI(title="ADR AI Assistant")
 
@@ -15,6 +16,7 @@ app.add_middleware(
 )
 
 adr_service = ADRService()
+uploader = UploaderService()
 
 
 @app.get("/api/health")

@@ -18,6 +18,8 @@ export interface Reference {
   author: string;
   date: string;
   source: string;
+  public_url: string;
+  s3_uri: string;
 }
 
 export interface QueryResponse {
