@@ -1,3 +1,4 @@
+import { apiRoutes } from '@/constants/apiRoutes';
 import { envConstants } from '@/constants/env-contants';
 import axios from 'axios';
 
@@ -28,9 +29,46 @@ export interface QueryResponse {
   references: Reference[];
 }
 
+export interface UploadedFileResponse {
+  object_key: string;
+  filename: string;
+  size_bytes: number;
+  last_modified: string;
+  permanent_url: string;
+}
+
+
 export const chatApi = {
   sendQuery: async (request: QueryRequest): Promise<QueryResponse> => {
-    const response = await api.post<QueryResponse>('/query', request);
+    const response = await api.post<QueryResponse>(apiRoutes.query, request);
+    return response.data;
+  },
+};
+
+export const fileApi = {
+  uploadFile: async (
+    file: File, 
+    onProgress?: (progress: number) => void
+  ): Promise<UploadedFileResponse> => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await api.post<UploadedFileResponse>(apiRoutes.uploadFile, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      onUploadProgress: (progressEvent) => {
+        if (progressEvent.total && onProgress) {
+          const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          onProgress(progress);
+        }
+      },
+    });
+    return response.data;
+  },
+
+  getFiles: async (): Promise<UploadedFileResponse[]> => {
+    const response = await api.get<UploadedFileResponse[]>(apiRoutes.listFiles);
     return response.data;
   },
 };

@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { chatApi, QueryRequest, QueryResponse } from '@/lib/api';
 import { useState } from 'react';
 import { sanitizeHtml } from '@/lib/utils';
@@ -13,7 +13,6 @@ export interface ChatMessage {
 
 export const useChat = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const queryClient = useQueryClient();
 
   const sendMessageMutation = useMutation({
     mutationFn: chatApi.sendQuery,

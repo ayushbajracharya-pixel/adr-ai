@@ -1,9 +1,9 @@
 from fastapi import FastAPI, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from app.services.adr_service import ADRService
+from app.services.uploader_service import UploaderService
 from app.models.schemas import QueryRequest
 
-from app.services.uploader_service import UploaderService
 
 app = FastAPI(title="ADR AI Assistant")
 
@@ -42,3 +42,14 @@ async def query_adrs(request: QueryRequest):
         return response
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/files")
+def list_uploaded_files():
+    """
+    Endpoint to list all files uploaded to the S3 bucket.
+    """
+    file_list = uploader.list_files()
+    if file_list is None:
+        raise HTTPException(status_code=500, detail="Could not retrieve file list")
+    return file_list

@@ -1,12 +1,15 @@
-import { Button } from '@/components/ui/button';
-import { MessageSquare, Trash2 } from 'lucide-react';
+import { Button } from "@/components/ui/button";
+import { MessageSquare, Trash2 } from "lucide-react";
 
 interface ChatHeaderProps {
   onClearMessages: () => void;
   messageCount: number;
 }
 
-export const ChatHeader = ({ onClearMessages, messageCount }: ChatHeaderProps) => {
+export const ChatHeader = ({
+  onClearMessages,
+  messageCount,
+}: ChatHeaderProps) => {
   return (
     <header className="flex items-center justify-between p-4 border-b border-border bg-card">
       <div className="flex items-center gap-3">
@@ -20,7 +23,7 @@ export const ChatHeader = ({ onClearMessages, messageCount }: ChatHeaderProps) =
           </p>
         </div>
       </div>
-      
+
       {messageCount > 0 && (
         <Button
           variant="ghost"
