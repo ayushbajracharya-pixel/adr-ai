@@ -11,9 +11,11 @@ export interface UploadedFile {
   size: number;
   uploadedAt: Date;
   isUploading?: boolean;
+  isDeleting?: boolean;
   uploadProgress?: number;
   isFromServer?: boolean;
   public_url?: string;
+  object_key?: string;
 }
 
 const ALLOWED_TYPES = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/markdown'];
@@ -22,6 +24,7 @@ const MAX_SIZE = 5 * 1024 * 1024; // 5MB
 export const useFileUpload = () => {
   const [localFiles, setLocalFiles] = useState<UploadedFile[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [deletingFileObjectKey, setDeletingFileObjectKey] = useState('');
   const queryClient = useQueryClient();
 
   // Fetch uploaded files from server
@@ -34,7 +37,8 @@ export const useFileUpload = () => {
       size: file.size_bytes,
       uploadedAt: new Date(file.last_modified),
       isFromServer: true,
-      public_url: file.permanent_url
+      public_url: file.permanent_url,
+      object_key: file.object_key
     })),
   });
 
@@ -59,10 +63,30 @@ export const useFileUpload = () => {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: ({ objectKey }: { objectKey: string}) =>
+      fileApi.deleteFile(objectKey),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['uploadedFiles'] });
+      toast({
+        title: "File Deleted",
+        description: "File deleted successfully from server",
+      });
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    onError: (error: any) => {
+      toast({
+        title: "Delete failed",
+        description: error.response?.data?.message || "Failed to delete file",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Combine local and server files
   const uploadedFiles = useMemo(() => {
-    return [...localFiles, ...(serverFiles || [])]
-  }, [localFiles, serverFiles])
+    return [...localFiles, ...(serverFiles.map(item => item.object_key === deletingFileObjectKey ? {...item, isDeleting: true} : item) || [])]
+  }, [localFiles, serverFiles, deletingFileObjectKey])
 
   const validateFile = useCallback((file: File): string | null => {
     if (!ALLOWED_TYPES.includes(file.type) && !file.name.endsWith('.md')) {
@@ -112,7 +136,7 @@ export const useFileUpload = () => {
       }
     }, {
       onSuccess: () => {
-        // Remove from local files as it will come from server files
+      // Remove from local files as it will come from server files
         setLocalFiles(prev => prev.filter(f => f.id !== tempId));
       },
       onError: () => {
@@ -126,24 +150,34 @@ export const useFileUpload = () => {
 
   const removeFile = useCallback((id: string) => {
     const file = uploadedFiles.find(f => f.id === id);
-    
-    if (file?.isFromServer) {
-      // TODO: Add API call to delete server file when endpoint is available
-      toast({
-        title: "Cannot remove",
-        description: "Server file removal not yet implemented",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    // Remove local file
-    setLocalFiles(prev => prev.filter(file => file.id !== id));
-    toast({
-      title: "File removed",
-      description: "File removed successfully",
+
+    setDeletingFileObjectKey(file.object_key);
+
+    deleteMutation.mutate({
+      objectKey: file.object_key,
+    }, {
+      onSettled: () => {
+        setDeletingFileObjectKey("");
+      }
     });
-  }, [uploadedFiles]);
+
+    // if (file?.isFromServer) {
+    //   // TODO: Add API call to delete server file when endpoint is available
+    //   toast({
+    //     title: "Cannot remove",
+    //     description: "Server file removal not yet implemented",
+    //     variant: "destructive",
+    //   });
+    //   return;
+    // }
+    
+    // // Remove local file
+    // setLocalFiles(prev => prev.filter(file => file.id !== id));
+    // toast({
+    //   title: "File removed",
+    //   description: "File removed successfully",
+    // });
+  }, [uploadedFiles, deleteMutation]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();

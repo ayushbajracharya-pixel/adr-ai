@@ -53,3 +53,14 @@ def list_uploaded_files():
     if file_list is None:
         raise HTTPException(status_code=500, detail="Could not retrieve file list")
     return file_list
+
+
+@app.delete("/api/files/{object_key:path}")
+async def delete_file(object_key: str):
+    """
+    Endpoint to delete a file from both S3 and the ChromaDB knowledge base.
+    """
+    try:
+        return await adr_service.delete_file(object_key)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

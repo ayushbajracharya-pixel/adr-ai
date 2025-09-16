@@ -1,5 +1,6 @@
 export const apiRoutes = {
-    uploadFile: '/upload',
     query: '/query',
-    listFiles: '/files'
+    listFiles: '/files',
+    uploadFile: '/upload',
+    deleteFile: '/files/:objectKey',
 }

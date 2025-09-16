@@ -1,8 +1,9 @@
-import { FileText, File, Loader2 } from "lucide-react";
+import { FileText, File, Loader2, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { UploadedFile } from "@/hooks/useFileUpload";
+import { Button } from "./ui/button";
 
 interface FileListProps {
   files: UploadedFile[];
@@ -66,7 +67,7 @@ export const FileList = ({
           <Card className="p-4 hover:shadow-md transition-shadow cursor-pointer">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3 flex-1 min-w-0">
-                {file.isUploading ? (
+                {file.isUploading || file.isDeleting ? (
                   <Loader2 className="h-5 w-5 text-primary animate-spin" />
                 ) : (
                   getFileIcon(file.name)
@@ -106,15 +107,19 @@ export const FileList = ({
                 </div>
               </div>
 
-              {/* <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onRemove(file.id)}
-              className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 ml-4"
-              disabled={file.isUploading}
-            >
-              <X className="h-4 w-4" />
-            </Button> */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onRemove(file.id);
+                }}
+                className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 ml-4"
+                disabled={file.isUploading || file.isDeleting}
+              >
+                <X className="h-4 w-4" />
+              </Button>
             </div>
           </Card>
         </a>

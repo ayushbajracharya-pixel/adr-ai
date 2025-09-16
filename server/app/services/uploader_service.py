@@ -81,7 +81,7 @@ class UploaderService:
                 object_name,
                 ExtraArgs={"ContentType": content_type},
             )
-            s3_uri = f"s3://{self.bucket_name}/{object_name}"
+            s3_uri = self.get_s3_uri(object_name)
             public_url = self._get_public_url(object_name)
             print(f"✅ Successfully uploaded '{object_name}' to {s3_uri}")
             return {
@@ -130,6 +130,24 @@ class UploaderService:
         except Exception as e:
             print(f"Error listing files: {e}")
             return None
+
+    def delete_file(self, object_key: str):
+        """
+        Deletes a file from the S3 bucket.
+        Returns deleted object_key on success, False on failure.
+        """
+        try:
+            self.s3_client.delete_object(Bucket=self.bucket_name, Key=object_key)
+            print(
+                f"✅ Successfully deleted '{object_key}' from s3://{self.bucket_name}"
+            )
+            return object_key
+        except ClientError as e:
+            print(f"❌ Error deleting object: {e}")
+            return False
+
+    def get_s3_uri(self, object_key):
+        return f"s3://{self.bucket_name}/{object_key}"
 
     def _set_public_read_policy(self):
         """Sets a public read bucket policy. For AWS S3."""

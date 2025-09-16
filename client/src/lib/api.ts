@@ -37,6 +37,10 @@ export interface UploadedFileResponse {
   permanent_url: string;
 }
 
+export interface DeletedFileResponse {
+  object_key: string;
+}
+
 
 export const chatApi = {
   sendQuery: async (request: QueryRequest): Promise<QueryResponse> => {
@@ -71,4 +75,9 @@ export const fileApi = {
     const response = await api.get<UploadedFileResponse[]>(apiRoutes.listFiles);
     return response.data;
   },
+
+  deleteFile: async (object_key): Promise<DeletedFileResponse[]> => {
+    const response = await api.delete<DeletedFileResponse[]>(apiRoutes.deleteFile.replace(":objectKey", object_key));
+    return response.data;
+  }
 };
