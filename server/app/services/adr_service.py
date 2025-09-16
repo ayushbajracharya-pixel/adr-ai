@@ -1,3 +1,4 @@
+from fastapi import HTTPException
 from langchain_openai import OpenAIEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
@@ -24,6 +25,7 @@ from app.services.uploader_service import UploaderService
 
 # Initialize your UploaderService. It will automatically use the settings.
 uploader_service = UploaderService()
+collection_name = "adr_collection"
 
 
 class ADRService:
@@ -32,7 +34,7 @@ class ADRService:
         self.client = chromadb.HttpClient(host="chromadb", port=8000)
         self.vector_store = Chroma(
             client=self.client,
-            collection_name="adr_collection",
+            collection_name=collection_name,
             embedding_function=self.embeddings,
         )
 
@@ -144,6 +146,46 @@ class ADRService:
 
         # Combine the generated response and references
         return {"query": query, "response": response_text, "references": references}
+
+    async def delete_file(self, object_key: str):
+        # object_key = "adr_uploads/ADR-0001_ Use Kafka for Messaging in Microservices Architecture.pdf"
+        try:
+            s3_uri = uploader_service.get_s3_uri(object_key)
+            self.vector_store.delete(where={"s3_uri": s3_uri})
+            print(
+                f"✅ Successfully deleted documents for '{object_key}' from ChromaDB."
+            )
+
+        except Exception as e:
+            # Note: If this fails, the file is already gone from S3.
+            # We raise a different error to indicate a partial failure.
+            raise HTTPException(
+                status_code=500,
+                detail=f"Vector store deletion failed: {e}. File was successfully removed from S3, but its index data remains. You may need to manually re-index.",
+            )
+
+        try:
+            s3_deleted = uploader_service.delete_file(object_key)
+            if not s3_deleted:
+                # The uploader_service handles its own error logging, so we just raise here.
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to delete file from S3 with object key: {object_key}.",
+                )
+        except ClientError as e:
+            # Catch specific Boto3 client errors (e.g., permissions issues, file not found).
+            # We re-raise it as an HTTPException for FastAPI to handle.
+            raise HTTPException(
+                status_code=500, detail=f"S3 deletion failed due to a client error: {e}"
+            )
+        except Exception as e:
+            # Catch any other unexpected errors during the S3 operation.
+            raise HTTPException(
+                status_code=500,
+                detail=f"An unexpected error occurred during S3 deletion: {e}",
+            )
+
+        return {"object_key": object_key}
 
     def _extract_adr_metadata(
         self, text: str, filename: str, public_url: str, s3_uri: str
