@@ -7,24 +7,21 @@ from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough
 import chromadb
+from app.utils.text_cleaner import clean_text_from_bullets, one_hot_encode_lists_in_dict
 
 from langchain.schema import Document
 import pypdfium2 as pdfium
 import docx
-import re
 from io import BytesIO
-from typing import Dict, List, Optional
-from botocore.exceptions import ClientError, NoCredentialsError
+from typing import Dict, List
+from botocore.exceptions import ClientError
 
 from app.config.settings import settings
 from app.models.schemas import QueryIntent
-from app.services.intent_service import get_intent_extraction_chain
 from app.services.retrieval_service import get_hybrid_retriever
 from app.services.uploader_service import UploaderService
+from app.chains.extraction_chain import ExtractionChain
 
-
-# Initialize your UploaderService. It will automatically use the settings.
-uploader_service = UploaderService()
 collection_name = "adr_collection"
 
 
@@ -37,7 +34,6 @@ class ADRService:
             collection_name=collection_name,
             embedding_function=self.embeddings,
         )
-
         self.llm = ChatOpenAI(
             model="gpt-4.1-nano",
             temperature=0.1,
@@ -46,58 +42,87 @@ class ADRService:
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=1000, chunk_overlap=200, separators=["\n\n", "\n", ". ", " "]
         )
-        self.intent_chain = get_intent_extraction_chain()
+        self.extraction_chain = ExtractionChain()
+        self.uploader_service = UploaderService()
 
     async def process_adr(self, file):
         """Process uploaded ADR and add to knowledge base"""
 
-        # Define the S3 object name (e.g., in a 'raw_uploads' folder)
-        s3_object_name = f"adr_uploads/{file.filename}"
+        file_name = file.filename
+        content = await file.read()
 
+        # Step 1: Upload to S3 with specific error handling
+        s3_uri = None
+        public_url = None
         try:
-            content = await file.read()
-
-            # Create an in-memory file-like object from the content.
-            file_obj = BytesIO(content)
-
-            # Use the UploaderService to upload the in-memory object directly to S3.
-            uploadResponse = uploader_service.upload_fileobj(file_obj, s3_object_name)
-            s3_uri = uploadResponse["s3_uri"]
-            public_url = uploadResponse["public_url"]
-
-            if not s3_uri:
-                print("Failed to upload file to S3.")
-                return None  # Or handle the error as appropriate
-
-            print(f"Successfully uploaded {file.filename} to S3.")
-
-            # Extract text using pypdfium2 or other extractors
-            text_content = self._extract_text_from_file_content(content, file.filename)
-
-            # Extract metadata
-            metadata = self._extract_adr_metadata(
-                text_content, file.filename, public_url, s3_uri
+            s3_object_name = f"adr_uploads/{file_name}"
+            with BytesIO(content) as file_obj:
+                uploadResponse = self.uploader_service.upload_fileobj(
+                    file_obj, s3_object_name
+                )
+                s3_uri = uploadResponse.get("s3_uri")
+                public_url = uploadResponse.get("public_url")
+                if not s3_uri:
+                    raise IOError("S3 upload returned a malformed response.")
+            print(f"Successfully uploaded {file_name} to S3.")
+        except Exception as e:
+            # Catch any issues with S3 connection, permissions, etc.
+            raise HTTPException(
+                status_code=500, detail=f"Failed to upload file to S3: {e}"
             )
 
-            # Create document with metadata
-            document = Document(page_content=text_content, metadata=metadata)
+        # Step 2: Extract text and handle potential errors
+        try:
+            text_content = clean_text_from_bullets(
+                self._extract_text_from_file_content(content, file_name)
+            )
+        except Exception as e:
+            # Catch errors during text extraction from the file content
+            # You might want to log this error and potentially delete the S3 object.
+            # self.uploader_service.delete_object(s3_object_name)
+            raise HTTPException(
+                status_code=500, detail=f"Failed to extract text from document: {e}"
+            )
 
-            # Split and store
+        # Step 3: Extract and transform metadata
+        try:
+            extracted_metadata = self.extraction_chain.invoke_metadata_chain(
+                {"text": text_content}
+            )
+            extracted_metadata["filename"] = file_name
+            extracted_metadata["source"] = file_name
+            extracted_metadata["s3_uri"] = s3_uri
+            extracted_metadata["public_url"] = public_url
+
+            transformed_metadata = one_hot_encode_lists_in_dict(extracted_metadata)
+
+        except Exception as e:
+            # Handle potential failures from the LLM extraction chain
+            raise HTTPException(
+                status_code=500, detail=f"Failed to extract metadata from document: {e}"
+            )
+
+        # Step 4: Split and store documents in the vector store
+        try:
+            document = Document(
+                page_content=text_content, metadata=transformed_metadata
+            )
             splits = self.text_splitter.split_documents([document])
 
             # Ensure all chunks have metadata
             for split in splits:
-                split.metadata.update(metadata)
+                split.metadata.update(transformed_metadata)
 
             doc_ids = self.vector_store.add_documents(splits)
 
             # Return all document IDs
             return doc_ids
 
-        except (ClientError, NoCredentialsError) as e:
-            # Handle errors related to S3 operations
-            print(f"S3 upload error: {e}")
-            return None
+        except Exception as e:
+            # Handle failures during vector store indexing
+            raise HTTPException(
+                status_code=500, detail=f"Failed to index document in vector store: {e}"
+            )
 
     async def query_adr(self, query: str) -> Dict:
         """
@@ -106,7 +131,7 @@ class ADRService:
         """
         # Step 1: Extract intent using the LLM chain
         try:
-            intent_info = self.intent_chain.invoke({"query": query})
+            intent_info = self.extraction_chain.invoke_intent_chain({"query": query})
             print(f"Extracted Intent: {intent_info.model_dump()}")
         except Exception as e:
             # Fallback to simple retrieval if intent extraction fails
@@ -150,7 +175,7 @@ class ADRService:
     async def delete_file(self, object_key: str):
         # object_key = "adr_uploads/ADR-0001_ Use Kafka for Messaging in Microservices Architecture.pdf"
         try:
-            s3_uri = uploader_service.get_s3_uri(object_key)
+            s3_uri = self.uploader_service.get_s3_uri(object_key)
             self.vector_store.delete(where={"s3_uri": s3_uri})
             print(
                 f"✅ Successfully deleted documents for '{object_key}' from ChromaDB."
@@ -165,7 +190,7 @@ class ADRService:
             )
 
         try:
-            s3_deleted = uploader_service.delete_file(object_key)
+            s3_deleted = self.uploader_service.delete_file(object_key)
             if not s3_deleted:
                 # The uploader_service handles its own error logging, so we just raise here.
                 raise HTTPException(
@@ -186,187 +211,6 @@ class ADRService:
             )
 
         return {"object_key": object_key}
-
-    def _extract_adr_metadata(
-        self, text: str, filename: str, public_url: str, s3_uri: str
-    ) -> dict:
-        """Extract metadata from ADR content - works with both markdown and flattened PDF/DOCX text"""
-        metadata = {
-            "filename": filename,
-            "source": filename,
-            "document_type": "ADR",
-            "public_url": public_url,
-            "s3_uri": s3_uri,
-        }
-
-        # Clean up text - handle both \n and actual newlines
-        text_clean = text.replace("\\n", "\n")
-        lines = text_clean.split("\n")
-
-        # Extract title (first line or line containing ADR-XXXX)
-        title = self._extract_title(text_clean, lines)
-        if title:
-            metadata["title"] = title
-            # Extract ADR number
-            adr_match = re.search(r"ADR-(\d+)", title)
-            if adr_match:
-                metadata["adr_number"] = adr_match.group(1)
-
-        # Extract basic fields (works for both formats)
-        metadata.update(self._extract_basic_fields(text_clean))
-
-        # Extract decision makersing_function=self.embeddings,
-        decision_makers = self._extract_decision_makers(text_clean)
-        if decision_makers:
-            for dm in decision_makers:
-                metadata[f"decision_maker_{dm.lower()}"] = True
-
-        # Extract technologies mentioned
-        mentioned_technologies = self._extract_technologies_from_text(text_clean)
-        if mentioned_technologies:
-            for tech in mentioned_technologies:
-                metadata[f"tech_{tech.lower()}"] = True
-
-        return metadata
-
-    def _extract_title(self, text: str, lines: List[str]) -> Optional[str]:
-        """Extract title from various formats"""
-        # Method 1: First line if it contains ADR-
-        if lines and "ADR-" in lines[0]:
-            return lines[0].strip()
-
-        # Method 2: Look for title pattern in first few lines
-        for line in lines[:5]:
-            if "ADR-" in line and any(
-                word in line.lower() for word in ["use", "implement", "choose", "adopt"]
-            ):
-                return line.strip()
-
-        # Method 3: Regex pattern for ADR title
-        title_match = re.search(r"(ADR-\d+:.*?)(?:\n|$)", text)
-        if title_match:
-            return title_match.group(1).strip()
-
-        return None
-
-    def _extract_basic_fields(self, text: str) -> Dict:
-        """Extract status, date, author fields"""
-        fields = {}
-
-        # Status - look for "Status" followed by value on next line or after colon
-        status_patterns = [
-            r"Status\s*\n\s*([^\n]+)",  # Status on one line, value on next
-            r"Status:\s*([^\n]+)",  # Status: Value
-            r"Status\s+([^\n]+)",  # Status Value
-        ]
-        for pattern in status_patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                fields["status"] = match.group(1).strip()
-                break
-
-        # Date
-        date_patterns = [
-            r"Date\s*\n\s*([^\n]+)",
-            r"Date:\s*([^\n]+)",
-            r"Date\s+([^\n]+)",
-        ]
-        for pattern in date_patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                fields["date"] = match.group(1).strip()
-                break
-
-        # Author
-        author_patterns = [
-            r"Author\s*\n\s*([^\n]+)",
-            r"Author:\s*([^\n]+)",
-            r"Author\s+([^\n]+)",
-        ]
-        for pattern in author_patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                fields["author"] = match.group(1).strip()
-                break
-
-        return fields
-
-    def _extract_decision_makers(self, text: str) -> List[str]:
-        """Extract decision makers list"""
-        decision_makers = []
-
-        # Find the Decision Makers section
-        patterns = [  # Filter by technologies using boolean flags
-            # Example: If technologies are ['kafka', 'sqs'], this will create
-            # {'tech_kafka': {'$eq': True}} and {'tech_sqs': {'$eq': True}}
-            r"Decision Makers\s*\n(.*?)(?=\n[A-Z][a-z]+\s*\n|\n\n|\Z)",  # Until next section
-            r"Decision Makers:\s*\n(.*?)(?=\n[A-Z][a-z]+\s*\n|\n\n|\Z)",
-            r"Decision Makers\s*\n(.*?)(?=Context|Decision|Status|\Z)",
-        ]
-
-        for pattern in patterns:
-            match = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
-            if match:
-                makers_text = match.group(1).strip()
-
-                # Split by newlines and clean
-                for line in makers_text.split("\n"):
-                    line_clean = line.strip()
-                    if line_clean and not line_clean.lower().startswith(
-                        ("context", "decision", "status")
-                    ):
-                        # Remove bullet points or dashes
-                        line_clean = re.sub(r"^[-•*]\s*", "", line_clean)
-                        if line_clean:
-                            decision_makers.append(line_clean)
-                break
-
-        return decision_makers
-
-    def _extract_technologies_from_text(self, text: str) -> List[str]:
-        """Extract technology names mentioned in the ADR"""
-        tech_patterns = [
-            r"\bkafka\b",
-            r"\brabbitmq\b",
-            r"\baws\s+sqs\b",
-            r"\bsqs\b",
-            r"\bmicroservices\b",
-            r"\bmsk\b",
-            r"\bzookeeper\b",
-            r"\bkraft\b",
-            r"\bamqp\b",
-            r"\bkafka\s+connect\b",
-            r"\bkafka\s+streams\b",
-            r"\bksqldb\b",
-            r"\bevent\s+streaming\b",
-            r"\bmessaging\b",
-            # GenAI patterns
-            r"\blangchain\b",
-            r"\bllama\b",
-            r"\bgpt-?\d*\b",
-            r"\bclaude\b",
-            r"\blangraph\b",
-            r"\bopenai\b",
-            r"\bhuggingface\b",
-            r"\btransformers\b",
-            r"\btext-to-speech\b",
-            r"\btts\b",
-            r"\bspeech-to-text\b",
-            r"\bstt\b",
-            r"\bembedding\b",
-            r"\bvector\s+database\b",
-            r"\brag\b",
-            r"\bllm\b",
-        ]
-
-        found_techs = set()
-        text_lower = text.lower()
-
-        for pattern in tech_patterns:
-            matches = re.findall(pattern, text_lower, re.IGNORECASE)
-            found_techs.update(matches)
-
-        return list(found_techs)
 
     def _extract_text_from_pdf(self, file_obj: BytesIO) -> str:
         """Extract text from PDF using pypdfium2 from an in-memory object."""
