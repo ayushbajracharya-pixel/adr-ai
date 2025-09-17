@@ -38,3 +38,33 @@ class QueryIntent(BaseModel):
         None,
         description="The primary use case of the application (e.g., chat application, telemedicine).",
     )
+
+
+class ADRMetadata(BaseModel):
+    adr_number: str = Field(description="The ADR ID, e.g., ADR-0001")
+    title: str = Field(description="The title of the ADR document.")
+    status: str = Field(
+        description="The status of the ADR, e.g., 'Accepted', 'Superseded'."
+    )
+    date: str = Field(description="The date the ADR was created.")
+    author: str = Field(description="The author of the ADR.")
+    decision_makers: list[str] = Field(
+        description="A list of names of the decision makers. Normally, persons who have reviewed and/or approved the ADR."
+    )
+    context: str = Field(
+        description="A summary of the project context and requirements."
+    )
+    considered_options: list[str] = Field(
+        description="A list of the options that were considered."
+    )
+    decision: str = Field(description="The final decision that was made.")
+    rationale: str = Field(description="The reasoning behind the decision.")
+    tech: list[str] = Field(
+        description="A list of technologies mentioned in the ADR. Technologies includes programming languages, framework, libraries and paradigms."
+    )
+    # consequences_positive: list[str] = Field(
+    #     description="A list of the positive consequences of the decision."
+    # )
+    # consequences_negative: list[str] = Field(
+    #     description="A list of the negative consequences of the decision."
+    # )
