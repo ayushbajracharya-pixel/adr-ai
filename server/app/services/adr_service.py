@@ -7,7 +7,12 @@ from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough
 import chromadb
-from app.utils.text_cleaner import clean_text_from_bullets, one_hot_encode_lists_in_dict
+import re
+from app.utils.text_cleaner import (
+    clean_text_from_bullets,
+    one_hot_encode_lists_in_dict,
+)
+
 
 from langchain.schema import Document
 import pypdfium2 as pdfium
@@ -21,6 +26,7 @@ from app.models.schemas import QueryIntent
 from app.services.retrieval_service import get_hybrid_retriever
 from app.services.uploader_service import UploaderService
 from app.chains.extraction_chain import ExtractionChain
+from app.constants.misc_constants import canonical_headings_map
 
 collection_name = "adr_collection"
 
@@ -38,9 +44,6 @@ class ADRService:
             model="gpt-4.1-nano",
             temperature=0.1,
             openai_api_key=settings.OPENAI_API_KEY,
-        )
-        self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000, chunk_overlap=200, separators=["\n\n", "\n", ". ", " "]
         )
         self.extraction_chain = ExtractionChain()
         self.uploader_service = UploaderService()
@@ -104,10 +107,21 @@ class ADRService:
 
         # Step 4: Split and store documents in the vector store
         try:
+            # We can clean the text by removing the short info like status, date, etc. which are already present in the metadata
+            # so that our chunks contain only meaningful information.
+
+            # Get dynamic separators based on the specific document
+            dynamic_separators = self._get_dynamic_separators(text_content)
+
+            # Initialize the splitter with the dynamic separators
+            text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=1000, chunk_overlap=200, separators=dynamic_separators
+            )
+
             document = Document(
                 page_content=text_content, metadata=transformed_metadata
             )
-            splits = self.text_splitter.split_documents([document])
+            splits = text_splitter.split_documents([document])
 
             # Ensure all chunks have metadata
             for split in splits:
@@ -355,3 +369,32 @@ class ADRService:
             }
             references.append(ref)
         return references
+
+    def _get_dynamic_separators(self, text_content: str) -> list[str]:
+        """
+        Dynamically generates a list of separators based on recognized ADR section headings.
+        This version uses a single, cleaner data structure to manage canonical headings and synonyms.
+
+        Args:
+            text_content: The full text content of the ADR document.
+
+        Returns:
+            A list of separators to be used by the text splitter.
+        """
+        found_separators = []
+
+        for canonical_heading, synonyms in canonical_headings_map.items():
+            # Create a regex pattern to find any of the synonyms for the current canonical heading.
+            # This makes it case-insensitive and handles potential whitespace.
+            pattern = r"^\s*(" + "|".join([re.escape(s) for s in synonyms]) + r")\s*$"
+
+            if re.search(pattern, text_content, re.MULTILINE | re.IGNORECASE):
+                # If any synonym is found, use the canonical heading to create the separator.
+                separator = f"\n\n{canonical_heading}\n\n"
+                if separator not in found_separators:
+                    found_separators.append(separator)
+
+        # Add general fallbacks to ensure chunks are created even if no headings are found.
+        found_separators.extend(["\n\n", "\n", ". ", " "])
+
+        return found_separators
