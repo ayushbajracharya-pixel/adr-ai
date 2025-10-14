@@ -1,73 +1,93 @@
-# Welcome to your Lovable project
+## ADR AI Client
 
-## Project info
+A Vite + React + TypeScript frontend for ADR AI.
 
-**URL**: https://lovable.dev/projects/a8ad249f-54cc-4452-ab44-e740ff8917fe
+---
 
-## How can I edit this code?
+### Prerequisites
 
-There are several ways of editing your application.
+- Node.js 18+ (LTS recommended)
+- npm (or pnpm/yarn)
 
-**Use Lovable**
+---
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/a8ad249f-54cc-4452-ab44-e740ff8917fe) and start prompting.
+### Quick start
 
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+1) Install dependencies
+```bash
+cd client
+npm install
 ```
 
-**Edit a file directly in GitHub**
+2) Configure environment
+```bash
+# Create client/.env (or .env.local) with:
+VITE_API_BASE_URL=http://localhost:8000/api
+# Optional: choose a dev port for the client (avoid 8000 which the server uses)
+PORT=3000
+```
+Notes:
+- The server exposes its REST API under `/api` (e.g. `/api/query`, `/api/upload`, `/api/files`).
+- The client sends requests to `VITE_API_BASE_URL + route`, so make sure `/api` is included.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+3) Run the development server
+```bash
+npm run dev
+```
+Open `http://localhost:5173` (or the port you set in `PORT`).
 
-**Use GitHub Codespaces**
+4) Ensure the backend is running
+- Start the FastAPI server following `server/README.md` (default: `http://localhost:8000`).
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+---
 
-## What technologies are used for this project?
+### Available scripts
 
-This project is built with:
+```bash
+# Start the Vite dev server
+npm run dev
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+# Build for production
+npm run build
 
-## How can I deploy this project?
+# Preview the production build locally
+npm run preview
 
-Simply open [Lovable](https://lovable.dev/projects/a8ad249f-54cc-4452-ab44-e740ff8917fe) and click on Share -> Publish.
+# Lint the project
+npm run lint
+```
 
-## Can I connect a custom domain to my Lovable project?
+Dev server settings (see `vite.config.ts`):
+- Host: `::` (LAN-accessible)
+- Port: read from `PORT` in env, fallback is 8000. If your server uses 8000, set `PORT=5173` in `.env`.
 
-Yes, you can!
+---
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+### Project structure (client)
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+```text
+client/
+  src/
+    constants/
+      apiRoutes.ts        # '/query', '/files', '/upload', '/files/:objectKey'
+      env-contants.ts     # reads VITE_API_BASE_URL
+    lib/
+      api.ts              # axios instance + chat/file APIs
+    ...                   # UI, routes, components
+  vite.config.ts          # alias '@' -> './src', PORT from env
+  package.json
+  README.md
+```
+
+Path alias:
+- Import from `src` using `@`, e.g. `import { chatApi } from '@/lib/api'`.
+
+---
+
+### Troubleshooting
+
+- Requests fail or are blank: verify `VITE_API_BASE_URL` includes `/api`, e.g. `http://localhost:8000/api`.
+- Port conflict: set `PORT=5173` in `client/.env`.
+- CORS/network errors: ensure the server is running and reachable at `http://localhost:8000`.
+
+
