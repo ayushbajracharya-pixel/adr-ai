@@ -7,6 +7,33 @@ const api = axios.create({
   timeout: 30000,
 });
 
+// Add request interceptor to include auth token
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Add response interceptor to handle 401 errors
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // Token is invalid, clear it and redirect to login
+      localStorage.removeItem('auth_token');
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
+
 export interface QueryRequest {
   query: string;
 }
@@ -41,6 +68,22 @@ export interface DeletedFileResponse {
   object_key: string;
 }
 
+export interface User {
+  email: string;
+  name: string;
+  picture?: string;
+}
+
+export const authApi = {
+  getMe: async (token?: string): Promise<User> => {
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const response = await api.get<User>(apiRoutes.auth.me, { headers });
+    return response.data;
+  },
+  logout: async (): Promise<void> => {
+    await api.post(apiRoutes.auth.logout);
+  },
+};
 
 export const chatApi = {
   sendQuery: async (request: QueryRequest): Promise<QueryResponse> => {

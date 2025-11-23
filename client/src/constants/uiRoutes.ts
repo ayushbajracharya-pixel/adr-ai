@@ -1,4 +1,6 @@
 export const uiRoutes = {
     index: '/',
-    files: '/files'
+    files: '/files',
+    login: '/login',
+    authCallback: '/auth/callback'
 }

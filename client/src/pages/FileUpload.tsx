@@ -1,10 +1,20 @@
 import { Link } from "react-router-dom";
-import { MessageCircle, Upload } from "lucide-react";
+import { MessageCircle, Upload, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FileDropzone } from "@/components/FileDropzone";
 import { FileList } from "@/components/FileList";
 import { useFileUpload } from "@/hooks/useFileUpload";
+import { useAuth } from "@/contexts/AuthContext";
 import { uiRoutes } from "@/constants/uiRoutes";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const FileUpload = () => {
   const {
@@ -17,6 +27,17 @@ const FileUpload = () => {
     handleDragLeave,
     handleFileInput,
   } = useFileUpload();
+  const { user, logout } = useAuth();
+
+  const getInitials = (name?: string) => {
+    if (!name) return "U";
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
+  };
 
   return (
     <div className="min-h-screen bg-gradient-chat">
@@ -32,12 +53,42 @@ const FileUpload = () => {
             </p>
           </div>
 
-          <Link to={uiRoutes.index}>
-            <Button variant="outline" className="gap-2">
-              <MessageCircle className="h-4 w-4" />
-              Go to Chat
-            </Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link to={uiRoutes.index}>
+              <Button variant="outline" className="gap-2">
+                <MessageCircle className="h-4 w-4" />
+                Go to Chat
+              </Button>
+            </Link>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="relative h-10 w-10 rounded-full">
+                  <Avatar className="h-10 w-10">
+                    <AvatarImage src={user?.picture} alt={user?.name} />
+                    <AvatarFallback>{getInitials(user?.name)}</AvatarFallback>
+                  </Avatar>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-56" align="end" forceMount>
+                <DropdownMenuLabel className="font-normal">
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium leading-none">
+                      {user?.name || "User"}
+                    </p>
+                    <p className="text-xs leading-none text-muted-foreground">
+                      {user?.email}
+                    </p>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={logout} className="cursor-pointer">
+                  <LogOut className="mr-2 h-4 w-4" />
+                  <span>Log out</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
 
         {/* Upload Section */}
