@@ -46,11 +46,36 @@ AWS_ACCESS_KEY_ID=your-access-key-id
 AWS_SECRET_ACCESS_KEY=your-secret-access-key
 S3_BUCKET_NAME=your-bucket-name
 S3_BUCKET_REGION=us-east-1
+
+# Google OAuth 2.0
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+SECRET_KEY=your-random-secret-key-for-jwt-signing
+FRONTEND_URL=http://localhost:3000
 ```
 
 Notes:
 - `.env` is loaded by `docker-compose.yml` and `app/config/settings.py`.
 - Ensure the AWS credentials have permission to put/get/list objects in `S3_BUCKET_NAME`.
+- **Google OAuth 2.0 Setup:**
+  1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+  2. Create a new project or select an existing one
+  3. Configure the OAuth consent screen:
+     - Go to "APIs & Services" → "OAuth consent screen"
+     - Choose "External" (unless using Google Workspace)
+     - Fill in app name, user support email, and developer contact
+     - Add scopes: `openid`, `email`, `profile`
+     - Save and continue
+  4. Create OAuth 2.0 credentials:
+     - Go to "APIs & Services" → "Credentials"
+     - Click "Create Credentials" → "OAuth 2.0 Client ID"
+     - Choose "Web application" as the application type
+     - Add authorized redirect URI: `http://localhost:8000/api/auth/google/callback` (or your server URL)
+     - Click "Create"
+  5. Copy the Client ID and Client Secret to your `.env` file
+  6. Generate a random secret key for `SECRET_KEY` (e.g., using `openssl rand -hex 32`)
+  
+  Note: This uses the modern Google Identity Services (OAuth 2.0 / OpenID Connect) - no deprecated APIs required.
 
 ---
 
