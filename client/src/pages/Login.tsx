@@ -10,7 +10,7 @@ const Login = () => {
   const error = searchParams.get('error');
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
+    <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
       <div className="max-w-md w-full space-y-8 p-10 bg-white dark:bg-gray-800 rounded-lg shadow-lg">
         <div className="text-center">
           <h2 className="text-3xl font-bold text-gray-900 dark:text-white">

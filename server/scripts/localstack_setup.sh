@@ -78,6 +78,23 @@ create_bucket_aws_cli() {
         fi
     fi
     
+    # Allow public access at the bucket level (Block Public Access must be disabled even on LocalStack
+    # so that the bucket policy/ACL we set later actually takes effect).
+    echo -e "${YELLOW}Disabling S3 Block Public Access on the bucket...${NC}"
+    aws --endpoint-url="${LOCALSTACK_ENDPOINT}" s3api put-public-access-block \
+        --bucket "${S3_BUCKET_NAME}" \
+        --public-access-block-configuration BlockPublicAcls=false,IgnorePublicAcls=false,BlockPublicPolicy=false,RestrictPublicBuckets=false >/dev/null
+    aws --endpoint-url="${LOCALSTACK_ENDPOINT}" s3api delete-public-access-block \
+        --bucket "${S3_BUCKET_NAME}" >/dev/null 2>&1 || true
+    echo -e "${GREEN}✅ Block Public Access disabled${NC}"
+
+    # Explicit ACL so that pre-signed/object URLs work without credentials.
+    echo -e "${YELLOW}Setting bucket ACL to public-read...${NC}"
+    aws --endpoint-url="${LOCALSTACK_ENDPOINT}" s3api put-bucket-acl \
+        --bucket "${S3_BUCKET_NAME}" \
+        --acl public-read >/dev/null
+    echo -e "${GREEN}✅ Bucket ACL set${NC}"
+
     # Set bucket policy for public read access
     echo -e "${YELLOW}Setting bucket policy for public read access...${NC}"
     POLICY=$(cat <<EOF
@@ -134,6 +151,10 @@ create_bucket_python() {
 import boto3
 import json
 from botocore.exceptions import ClientError
+import sys
+
+def info(msg):
+    print(msg, flush=True)
 
 # Create S3 client
 s3_client = boto3.client(
@@ -169,6 +190,20 @@ except ClientError as e:
     else:
         print(f"❌ Error checking bucket: {e}")
         exit(1)
+
+# Disable block public access so ACL/policy are honored
+try:
+    s3_client.delete_public_access_block(Bucket=bucket_name)
+    info("✅ Block Public Access disabled")
+except ClientError:
+    info("ℹ️  No existing Block Public Access configuration to delete")
+
+# Set bucket ACL for public read
+try:
+    s3_client.put_bucket_acl(Bucket=bucket_name, ACL="public-read")
+    info("✅ Bucket ACL set to public-read")
+except Exception as e:
+    print(f"⚠️  Warning: Could not set bucket ACL: {e}")
 
 # Set bucket policy for public read access
 policy = {

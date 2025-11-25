@@ -4,9 +4,9 @@ from typing import List, Optional
 from app.config.database import get_db
 from app.routers.auth import get_current_user
 from app.services.conversation_service import ConversationService
-from app.models.schemas import QueryRequest, QueryResponse
+from app.models.schemas import QueryRequest, QueryResponse, Reference
 from app.services.adr_service import ADRService
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/api/conversations", tags=["conversations"])
 
@@ -38,7 +38,7 @@ class MessageResponse(BaseModel):
     conversation_id: str
     role: str
     content: str
-    references: Optional[dict] = None
+    references: Optional[List[Reference]] = None
     created_at: str
 
     class Config:
@@ -51,7 +51,7 @@ class ConversationWithMessages(BaseModel):
     title: Optional[str]
     created_at: str
     updated_at: str
-    messages: List[MessageResponse] = []
+    messages: List[MessageResponse] = Field(default_factory=list)
 
     class Config:
         from_attributes = True
