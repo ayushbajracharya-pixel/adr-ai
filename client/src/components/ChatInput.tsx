@@ -8,9 +8,10 @@ interface ChatInputProps {
   onSendMessage: (message: string) => void;
   isLoading: boolean;
   disabled?: boolean;
+  placeholder?: string;
 }
 
-export const ChatInput = ({ onSendMessage, isLoading, disabled }: ChatInputProps) => {
+export const ChatInput = ({ onSendMessage, isLoading, disabled, placeholder = "Ask me anything..." }: ChatInputProps) => {
   const [message, setMessage] = useState('');
 
   const handleSend = () => {
@@ -33,7 +34,7 @@ export const ChatInput = ({ onSendMessage, isLoading, disabled }: ChatInputProps
         value={message}
         onChange={(e) => setMessage(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="Ask me anything..."
+        placeholder={placeholder}
         className={cn(
           "min-h-[44px] max-h-32 resize-none bg-chat-input text-chat-input-foreground",
           "border-border focus:ring-primary"

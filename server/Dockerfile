@@ -1,17 +1,22 @@
-FROM python:3.13-slim
+FROM python:3.12-slim
 
-# Install Poetry
-RUN pip install poetry
+# Install UV
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 # Set working dir
 WORKDIR /app
 
-# Copy pyproject + lock first (better caching)
-COPY pyproject.toml poetry.lock* /app/
+# Copy pyproject.toml and uv.lock (if exists) for dependency caching
+COPY pyproject.toml uv.lock* /app/
 
-# Install dependencies and debugpy
-RUN poetry install --no-root --only main && \
-    poetry add debugpy
+# Install dependencies using UV
+# Use build arg to optionally include dev dependencies (for debug mode)
+ARG INSTALL_DEV=false
+RUN if [ "$INSTALL_DEV" = "true" ]; then \
+    uv sync --frozen; \
+    else \
+    uv sync --frozen --no-dev; \
+    fi
 
 # Copy app code
 COPY ./app ./app
@@ -21,4 +26,4 @@ EXPOSE 8000
 
 # The default command to run the application
 # This will be overridden by the 'command' in your docker-compose.yml for debugging
-CMD ["poetry", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

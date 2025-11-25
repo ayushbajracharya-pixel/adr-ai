@@ -8,12 +8,20 @@ class QueryRequest(BaseModel):
 
 class Reference(BaseModel):
     filename: str
-    content_preview: str
+    adr_number: str
+    title: str
+    status: str
+    author: str
+    date: str
+    source: str
+    public_url: str
+    s3_uri: str
+    content_preview: Optional[str] = None
 
 
 class QueryResponse(BaseModel):
     query: str
-    answer: str
+    response: str
     references: List[Reference]
     # found_implementations: bool
 

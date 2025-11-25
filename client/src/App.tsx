@@ -11,6 +11,7 @@ import FileUpload from "./pages/FileUpload";
 import Login from "./pages/Login";
 import AuthCallback from "./pages/AuthCallback";
 import { uiRoutes } from "./constants/uiRoutes";
+import { SidebarProvider } from "./components/ui/sidebar";
 
 const queryClient = new QueryClient();
 
@@ -19,31 +20,33 @@ const App = () => (
     <BrowserRouter>
       <AuthProvider>
         <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <Routes>
-            <Route path={uiRoutes.login} element={<Login />} />
-            <Route path={uiRoutes.authCallback} element={<AuthCallback />} />
-            <Route
-              path={uiRoutes.index}
-              element={
-                <ProtectedRoute>
-                  <Index />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path={uiRoutes.files}
-              element={
-                <ProtectedRoute>
-                  <FileUpload />
-                </ProtectedRoute>
-              }
-            />
+          <SidebarProvider>
+            <Toaster />
+            <Sonner />
+            <Routes>
+              <Route path={uiRoutes.login} element={<Login />} />
+              <Route path={uiRoutes.authCallback} element={<AuthCallback />} />
+              <Route
+                path={uiRoutes.index}
+                element={
+                  <ProtectedRoute>
+                    <Index />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path={uiRoutes.files}
+                element={
+                  <ProtectedRoute>
+                    <FileUpload />
+                  </ProtectedRoute>
+                }
+              />
 
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </SidebarProvider>
         </TooltipProvider>
       </AuthProvider>
     </BrowserRouter>

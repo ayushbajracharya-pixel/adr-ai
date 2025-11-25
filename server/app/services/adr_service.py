@@ -1,24 +1,22 @@
 from fastapi import HTTPException
 from langchain_openai import OpenAIEmbeddings
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough
+from langchain_core.documents import Document
 import chromadb
 import re
 from app.utils.text_cleaner import (
     clean_text_from_bullets,
     one_hot_encode_lists_in_dict,
 )
-
-
-from langchain.schema import Document
 import pypdfium2 as pdfium
 import docx
 from io import BytesIO
-from typing import Dict, List
+from typing import Dict, List, Optional
 from botocore.exceptions import ClientError
 
 from app.config.settings import settings
@@ -34,7 +32,7 @@ collection_name = "adr_collection"
 class ADRService:
     def __init__(self):
         self.embeddings = OpenAIEmbeddings(openai_api_key=settings.OPENAI_API_KEY)
-        self.client = chromadb.HttpClient(host="chromadb", port=8000)
+        self.client = chromadb.HttpClient(host=settings.CHROMADB_HOST, port=settings.CHROMADB_PORT)
         self.vector_store = Chroma(
             client=self.client,
             collection_name=collection_name,
@@ -138,10 +136,17 @@ class ADRService:
                 status_code=500, detail=f"Failed to index document in vector store: {e}"
             )
 
-    async def query_adr(self, query: str) -> Dict:
+    async def query_adr(
+        self, query: str, conversation_history: Optional[List[Dict]] = None
+    ) -> Dict:
         """
         Main function to process a user query, extract intent,
         perform hybrid retrieval, and generate a comprehensive response.
+        
+        Args:
+            query: The user's query
+            conversation_history: Optional list of previous messages in format
+                [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]
         """
         # Step 1: Extract intent using the LLM chain
         try:
@@ -164,8 +169,8 @@ class ADRService:
                 "response": "Sorry, there has been no such implementations.",
             }
 
-        # Step 3: Create the enhanced prompt using the intent info
-        prompt_template = self._create_enhanced_prompt(intent_info)
+        # Step 3: Create the enhanced prompt using the intent info and conversation history
+        prompt_template = self._create_enhanced_prompt(intent_info, conversation_history)
 
         # Format the retrieved documents for the prompt context
         context_str = self._format_docs(retrieved_docs)
@@ -286,7 +291,9 @@ class ADRService:
         else:
             raise Exception(f"Unsupported file format: {file_ext}")
 
-    def _create_enhanced_prompt(self, intent_info: QueryIntent) -> ChatPromptTemplate:
+    def _create_enhanced_prompt(
+        self, intent_info: QueryIntent, conversation_history: Optional[List[Dict]] = None
+    ) -> ChatPromptTemplate:
         """Creates a contextual prompt template for generation."""
         # This is where you insert your well-crafted prompt instructions
         base_prompt = """
@@ -294,8 +301,22 @@ class ADRService:
 
         Context from ADRs:
         {context}
+        """
 
-        User Query: {question}
+        # Add conversation history if available
+        if conversation_history:
+            base_prompt += "\n\nPrevious Conversation History:\n"
+            for msg in conversation_history[-10:]:  # Include last 10 messages for context
+                role = "User" if msg.get("role") == "user" else "Assistant"
+                content = msg.get("content", "")
+                # Truncate very long messages
+                if len(content) > 500:
+                    content = content[:500] + "..."
+                base_prompt += f"{role}: {content}\n"
+            base_prompt += "\n"
+
+        base_prompt += """
+        Current User Query: {question}
 
         ANALYSIS: The user is asking about a new project with these characteristics:
         """
@@ -322,7 +343,8 @@ class ADRService:
         base_prompt += """
 
         INSTRUCTIONS:
-        Based on the provided context, generate a detailed and comprehensive answer to the user's query.
+        Based on the provided context and conversation history, generate a detailed and comprehensive answer to the user's query.
+        Consider the conversation history to provide contextually relevant responses that build upon previous discussions.
         Format the entire response as a single, valid HTML block. Do not include any text outside of the HTML tags.
         Use appropriate HTML tags for headings (<h2>, <h3>), paragraphs (<p>), lists (<ul>, <li>), and bolding (<b> or <strong>).
         Ensure the response is clean and ready to be rendered in a web browser.

@@ -1,15 +1,4 @@
 services:
-  web:
-    build: .
-    container_name: fastapi_app
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./app:/app/app
-      - ./data:/data
-    env_file:
-      - .env
-    command: poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   chromadb:
     image: chromadb/chroma
@@ -18,3 +7,43 @@ services:
       - ./data/chroma_db:/data  # Persists the data in your local 'data' folder
     ports:
       - "8001:8000"   # Maps host port 8001 to container port 8000
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres_db
+    environment:
+      - POSTGRES_USER=adr_user
+      - POSTGRES_PASSWORD=adr_password
+      - POSTGRES_DB=adr_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U adr_user -d adr_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  localstack:
+    image: localstack/localstack:latest
+    container_name: localstack
+    ports:
+      - "4566:4566"
+      - "4510-4559:4510-4559"
+    environment:
+      - SERVICES=s3
+      - DEBUG=1
+      - DATA_DIR=/tmp/localstack/data
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+    volumes:
+      - ./data/localstack:/var/lib/localstack
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

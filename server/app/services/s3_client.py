@@ -11,12 +11,27 @@ class S3Client:
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(S3Client, cls).__new__(cls)
-            cls._instance.client = boto3.client(
-                "s3",
-                aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-                aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-                region_name=settings.S3_BUCKET_REGION,
-            )
+            
+            # Configure client with LocalStack endpoint if provided
+            client_kwargs = {
+                "aws_access_key_id": settings.AWS_ACCESS_KEY_ID,
+                "aws_secret_access_key": settings.AWS_SECRET_ACCESS_KEY,
+                "region_name": settings.S3_BUCKET_REGION,
+            }
+            
+            # Add endpoint URL for LocalStack
+            if settings.AWS_ENDPOINT_URL:
+                client_kwargs["endpoint_url"] = settings.AWS_ENDPOINT_URL
+            
+            cls._instance.client = boto3.client("s3", **client_kwargs)
+            
+            # Create bucket if using LocalStack and bucket doesn't exist
+            if settings.AWS_ENDPOINT_URL:
+                try:
+                    cls._instance.client.head_bucket(Bucket=settings.S3_BUCKET_NAME)
+                except cls._instance.client.exceptions.ClientError:
+                    # Bucket doesn't exist, create it
+                    cls._instance.client.create_bucket(Bucket=settings.S3_BUCKET_NAME)
         return cls._instance
 
     def get_client(self):

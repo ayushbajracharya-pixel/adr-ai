@@ -40,8 +40,8 @@ const FileUpload = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-chat">
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
+    <div className="min-h-screen w-full bg-gradient-chat">
+      <div className="container mx-auto px-4 py-8 w-full">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>

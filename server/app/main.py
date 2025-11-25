@@ -1,14 +1,35 @@
 from fastapi import FastAPI, UploadFile, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
+from contextlib import asynccontextmanager
+import os
 from app.services.adr_service import ADRService
 from app.services.uploader_service import UploaderService
 from app.models.schemas import QueryRequest
-from app.routers import auth
+from app.routers import auth, conversations
 from app.routers.auth import get_current_user
 from app.config.settings import settings
+from app.config.database import init_db
 
-app = FastAPI(title="ADR AI Assistant")
+# Configure LangSmith if API key is provided
+if settings.LANGCHAIN_API_KEY:
+    os.environ["LANGCHAIN_TRACING_V2"] = settings.LANGCHAIN_TRACING_V2 or "true"
+    os.environ["LANGCHAIN_ENDPOINT"] = settings.LANGCHAIN_ENDPOINT or "https://api.smith.langchain.com"
+    os.environ["LANGCHAIN_API_KEY"] = settings.LANGCHAIN_API_KEY
+    if settings.LANGCHAIN_PROJECT:
+        os.environ["LANGCHAIN_PROJECT"] = settings.LANGCHAIN_PROJECT
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Initialize database
+    await init_db()
+    yield
+    # Shutdown: Cleanup if needed
+    pass
+
+
+app = FastAPI(title="ADR AI Assistant", lifespan=lifespan)
 
 # Add session middleware (required for OAuth)
 app.add_middleware(
@@ -25,8 +46,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include auth router
+# Include routers
 app.include_router(auth.router)
+app.include_router(conversations.router)
 
 adr_service = ADRService()
 uploader = UploaderService()
