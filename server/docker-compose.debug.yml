@@ -1,6 +1,9 @@
 services:
   web:
-    build: .
+    build:
+      context: .
+      args:
+        INSTALL_DEV: "true"
     container_name: fastapi_app
     ports:
       - "8000:8000"
@@ -9,7 +12,7 @@ services:
       - ./app:/app/app
     env_file:
       - .env
-    command: poetry run python -m debugpy --listen 0.0.0.0:5678 --wait-for-client -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uv run python -m debugpy --listen 0.0.0.0:5678 --wait-for-client -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   chromadb:
     image: chromadb/chroma

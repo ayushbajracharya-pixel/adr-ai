@@ -1,35 +1,66 @@
 [project]
-name = "server"
+name = "adr-ai-server"
 version = "0.1.0"
-description = ""
+description = "FastAPI backend for ADR AI Assistant - ingests ADRs, extracts data with OpenAI, stores vectors in ChromaDB, and manages conversations"
 authors = [
-    {name = "Ayush Bajracharya"}
+    {name = "Ayush Bajracharya", email = "ayushbajracharya@lftechnology.com"},
+    {name = "Ujjal Khadka", email = "ujjal.khadka@lftechnology.com"}
 ]
 readme = "README.md"
-requires-python = ">=3.13,<4.0"
+license = {text = "MIT"}
+requires-python = ">=3.12"
 dependencies = [
-    "fastapi (>=0.116.1,<0.117.0)",
-    "uvicorn[standard] (>=0.35.0,<0.36.0)",
-    "python-dotenv (>=1.1.1,<2.0.0)",
-    "pydantic-settings (>=2.10.1,<3.0.0)",
-    "python-multipart (>=0.0.20,<0.0.21)",
-    "langchain (>=0.3.27,<0.4.0)",
-    "langchain-openai (>=0.3.32,<0.4.0)",
-    "langchain-community (>=0.3.29,<0.4.0)",
-    "unstructured (>=0.18.14,<0.19.0)",
-    "pypdfium2 (>=4.30.0,<5.0.0)",
-    "python-docx (>=1.2.0,<2.0.0)",
-    "chromadb (>=1.0.20,<2.0.0)",
-    "langchain-chroma (>=0.2.5,<0.3.0)",
-    "boto3 (>=1.40.28,<2.0.0)",
-    "botocore (>=1.40.30,<2.0.0)",
-    "authlib (>=1.3.0,<2.0.0)",
-    "python-jose[cryptography] (>=3.3.0,<4.0.0)",
-    "python-multipart (>=0.0.20,<0.0.21)",
-    "itsdangerous (>=2.2.0,<3.0.0)",
+    "fastapi>=0.116.1",
+    "uvicorn[standard]>=0.35.0",
+    "python-dotenv>=1.1.1",
+    "pydantic-settings>=2.10.1",
+    "python-multipart>=0.0.20",
+    "langchain>=0.3.27",
+    "langchain-openai>=0.3.32",
+    "langchain-community>=0.3.29",
+    "langchain-text-splitters>=0.3.0",
+    "langsmith>=0.3.45",
+    "unstructured>=0.18.14",
+    "pypdfium2>=4.30.0",
+    "python-docx>=1.2.0",
+    "chromadb>=1.0.20",
+    "langchain-chroma>=0.2.5",
+    "boto3>=1.40.28",
+    "botocore>=1.40.30",
+    "authlib>=1.3.0",
+    "python-jose[cryptography]>=3.3.0",
+    "itsdangerous>=2.2.0",
+    "sqlalchemy>=2.0.0",
+    "asyncpg>=0.29.0",
+    "alembic>=1.13.0",
 ]
 
-
 [build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.uv]
+dev-dependencies = [
+    "debugpy",
+]
+
+[tool.black]
+line-length = 100
+target-version = ['py312']
+include = '\.pyi?$'
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+

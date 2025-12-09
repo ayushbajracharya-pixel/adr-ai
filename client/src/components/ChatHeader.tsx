@@ -14,11 +14,13 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 interface ChatHeaderProps {
   onClearMessages: () => void;
   messageCount: number;
+  conversationTitle?: string | null;
 }
 
 export const ChatHeader = ({
   onClearMessages,
   messageCount,
+  conversationTitle,
 }: ChatHeaderProps) => {
   const { user, logout } = useAuth();
 
@@ -39,9 +41,11 @@ export const ChatHeader = ({
           <MessageSquare className="w-4 h-4 text-primary-foreground" />
         </div>
         <div>
-          <h1 className="text-lg font-semibold">AI Assistant</h1>
+          <h1 className="text-lg font-semibold">
+            {conversationTitle || "AI Assistant"}
+          </h1>
           <p className="text-sm text-muted-foreground">
-            Ask me anything about your documents
+            {conversationTitle ? "Conversation" : "Ask me anything about your documents"}
           </p>
         </div>
       </div>

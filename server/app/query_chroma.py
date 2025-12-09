@@ -5,15 +5,11 @@ from langchain_chroma import Chroma
 from pprint import pprint
 from app.config.settings import settings
 
-# The host and port must match the chromadb service in your docker-compose file
-CHROMA_HOST = "chromadb"  # os.getenv("CHROMA_HOST", "chromadb")
-CHROMA_PORT = 8000  # int(os.getenv("CHROMA_PORT", 8000))
-
 
 def get_vectorstore():
     """Initializes and returns the Chroma vector store client."""
     embeddings = OpenAIEmbeddings(openai_api_key=settings.OPENAI_API_KEY)
-    client = chromadb.HttpClient(host=CHROMA_HOST, port=CHROMA_PORT)
+    client = chromadb.HttpClient(host=settings.CHROMADB_HOST, port=settings.CHROMADB_PORT)
     vectorstore = Chroma(
         client=client,
         collection_name="adr_collection",

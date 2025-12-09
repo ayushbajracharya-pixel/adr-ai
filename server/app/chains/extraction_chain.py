@@ -1,14 +1,14 @@
-from langchain_core.output_parsers import JsonOutputParser
+from langchain_core.output_parsers import JsonOutputParser, PydanticOutputParser
 from langchain_openai import ChatOpenAI
-from langchain.prompts import ChatPromptTemplate
-from langchain.output_parsers import PydanticOutputParser
+from langchain_core.prompts import ChatPromptTemplate
 
 from app.models.schemas import ADRMetadata, QueryIntent
 
 
 class ExtractionChain:
     def __init__(self, model_name="gpt-4.1-nano", temperature=0):
-        self.model = ChatOpenAI(model=model_name, temperature=temperature)
+        self.model = ChatOpenAI(model=model_name, temperature=temperature,
+        )
 
         self.intent_chain = self._get_intent_extraction_chain()
         self.metadata_chain = self._get_metadata_extraction_chain()
