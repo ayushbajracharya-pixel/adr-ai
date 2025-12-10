@@ -181,10 +181,57 @@ You can customize the bucket name by setting the `S3_BUCKET_NAME` environment va
 
 ### Debug Mode
 
+#### 1. Start the Debug Compose File
+
 ```bash
 docker compose -f docker-compose.debug.yml up --build
 ```
-- Opens debugpy on port 5678 and waits for client attach.
+
+This will:
+- Start all services (web, chromadb, postgres, localstack)
+- Expose debugpy on port **5678**
+- Wait for a debugger to attach (the app won't start processing requests until you attach)
+
+#### 2. Attach Your Debugger
+
+The debug compose file uses **debugpy** and waits for a client connection. Attach from your IDE:
+
+**VS Code:**
+
+1. Create or update `.vscode/launch.json` in the project root:
+```json
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python: Remote Attach",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": {
+        "host": "localhost",
+        "port": 5678
+      },
+      "pathMappings": [
+        {
+          "localRoot": "${workspaceFolder}/server/app",
+          "remoteRoot": "/app/app"
+        }
+      ]
+    }
+  ]
+}
+```
+
+2. Start the debug compose file (from step 1)
+
+3. Press `F5` or go to **Run → Start Debugging**
+
+4. Select **"Python: Remote Attach"**
+
+**Notes:**
+- The container waits for the debugger; attach before making requests
+- Hot reload is still enabled (`--reload` flag)
+- All services (postgres, localstack, chromadb) are available in debug mode
 
 ---
 
