@@ -14,8 +14,8 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://adr_user:adr_password@postgres:5432/adr_db"
 
     # ChromaDB
-    CHROMADB_HOST: str = "localhost"  # Use "localhost" when running locally, "chromadb" in Docker
-    CHROMADB_PORT: int = 8001  # Use 8001 when running locally (host port), 8000 in Docker (container port)
+    CHROMADB_HOST: str = "chromadb"  # Use "localhost" when running locally, "chromadb" in Docker
+    CHROMADB_PORT: int = 8000  # Use 8001 when running locally (host port), 8000 in Docker (container port)
 
     # AWS / LocalStack
     AWS_ACCESS_KEY_ID: str = "test"
