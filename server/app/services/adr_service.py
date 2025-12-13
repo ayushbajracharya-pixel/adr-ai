@@ -148,6 +148,11 @@ class ADRService:
             conversation_history: Optional list of previous messages in format
                 [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]
         """
+        # Step 0: Validate query quality - skip retrieval for low-quality queries
+        query_validation = self._validate_query_quality(query, conversation_history)
+        if not query_validation["is_searchable"]:
+            return self._generate_conversational_response(query, query_validation["reason"], conversation_history)
+        
         # Step 1: Extract intent using the LLM chain
         try:
             intent_info = self.extraction_chain.invoke_intent_chain({"query": query})
@@ -163,11 +168,10 @@ class ADRService:
         retriever = get_hybrid_retriever(self.vector_store, intent_info.model_dump())
         retrieved_docs = retriever.invoke(query)
 
+        # If no results, generate a helpful "no results" response
         if not retrieved_docs:
-            return {
-                "query": query,
-                "response": "Sorry, there has been no such implementations.",
-            }
+            if not retrieved_docs:
+                return self._generate_no_results_response(query, intent_info, conversation_history)
 
         # Step 3: Create the enhanced prompt using the intent info and conversation history
         prompt_template = self._create_enhanced_prompt(intent_info, conversation_history)
@@ -409,6 +413,185 @@ class ADRService:
             references.append(ref)
         return references
 
+    def _validate_query_quality(self, query: str, conversation_history: Optional[List[Dict]] = None) -> Dict[str, any]:
+        """
+        Validates if a query is searchable and should trigger ADR retrieval.
+        Uses comprehensive heuristics and LLM-based classification.
+        
+        Returns:
+            Dict with 'is_searchable' (bool) and 'reason' (str) if not searchable
+        """
+        query = query.strip()
+        query_lower = query.lower().strip()
+        
+        # Quick heuristic checks
+        if len(query) < 3:
+            return {"is_searchable": False, "reason": "query_too_short"}
+        
+        # Check for common conversational fillers (case-insensitive)
+        conversational_fillers = {
+            "yeah", "yes", "yep", "yup", "ok", "okay", "okey", "sure", "cool",
+            "thanks", "thank you", "thx", "nice", "great", "awesome", "perfect",
+            "alright", "alrighty", "got it", "gotcha", "right", "correct",
+            "understood", "i see", "i understand", "makes sense", "sounds good",
+            "good", "fine", "okay then", "sure thing", "no problem", "np"
+        }
+        
+        if query_lower in conversational_fillers:
+            # Special handling for "thank you" - check if there's conversation history
+            if query_lower in {"thanks", "thank you", "thx"} and conversation_history:
+                # Check if the last assistant message was a substantive response
+                for msg in reversed(conversation_history):
+                    if msg.get("role") == "assistant":
+                        # If assistant provided a substantive response, this is a thank you
+                        return {"is_searchable": False, "reason": "thank_you_after_response"}
+            return {"is_searchable": False, "reason": "conversational_filler"}
+        
+        # Check for meta-questions about the conversation/system itself
+        meta_question_patterns = [
+            r"what (queries|questions|messages) (have|did) (i|you)",
+            r"what (did|have) (i|you) (asked|said|queried)",
+            r"show (me )?(my|the) (previous|past|earlier) (queries|questions|messages)",
+            r"list (my|the) (queries|questions|messages)",
+            r"what (have|did) (we|i) (talked|discussed)",
+            r"what (is|are) (my|the) (conversation|chat) (history|log)",
+            r"how (many|much) (queries|questions) (have|did) (i|you)",
+            r"what (can|do) (you|i) (do|help)",
+            r"what (are|is) (your|the) (capabilities|features|functions)",
+            r"who (are|is) (you|this)",
+            r"what (is|are) (this|you)",
+            r"help (me|us)",
+            r"what (should|can) (i|we) (ask|query)",
+            r"how (do|does) (this|it|you) (work|function)",
+        ]
+        
+        for pattern in meta_question_patterns:
+            if re.search(pattern, query_lower, re.IGNORECASE):
+                return {"is_searchable": False, "reason": "meta_question"}
+        
+        # Check for greetings and closings
+        greeting_patterns = [
+            r"^(hi|hello|hey|greetings|good (morning|afternoon|evening))",
+            r"^(bye|goodbye|see (you|ya)|farewell|take care)",
+        ]
+        
+        for pattern in greeting_patterns:
+            if re.match(pattern, query_lower):
+                return {"is_searchable": False, "reason": "greeting_or_closing"}
+        
+        # Check word count - queries with only 1-2 words are often not searchable
+        words = query.split()
+        if len(words) <= 1:
+            return {"is_searchable": False, "reason": "insufficient_words"}
+        
+        # LLM-based classification for comprehensive validation
+        # This is the primary method for holistic query classification
+        try:
+            # Build context about conversation history if available
+            history_context = ""
+            if conversation_history:
+                recent_messages = conversation_history[-4:]  # Last 4 messages for context
+                history_context = "\n\nRecent conversation context:\n"
+                for msg in recent_messages:
+                    role = "User" if msg.get("role") == "user" else "Assistant"
+                    content = msg.get("content", "")[:200]  # Truncate long messages
+                    history_context += f"{role}: {content}\n"
+            
+            classification_prompt = f"""
+            You are a query classifier for an Architecture Decision Records (ADRs) knowledge base system.
+            
+            Determine if the following user message is a SEARCHABLE query that should retrieve ADRs from the knowledge base, or if it's a CONVERSATIONAL message that should not trigger ADR retrieval.
+            
+            User message: "{query}"
+            {history_context}
+            
+            Respond with ONLY one word: "searchable" or "conversational"
+            
+            Classify as "conversational" (DO NOT retrieve ADRs) if the message is:
+            - An acknowledgment, agreement, or confirmation (yeah, ok, thanks, got it, etc.)
+            - A greeting or closing (hi, hello, bye, goodbye, etc.)
+            - A meta-question about the conversation itself (e.g., "what queries have I asked?", "what did we discuss?", "show my previous questions")
+            - A question about the system's capabilities or how to use it (e.g., "what can you do?", "how does this work?", "what should I ask?")
+            - A request for help without a specific technical question
+            - A simple statement without asking for information
+            - Asking about conversation history, previous messages, or chat logs
+            - Not requesting information about architecture, technology, or decisions
+            - A follow-up acknowledgment to a previous response (e.g., "thanks" after getting an answer)
+            
+            Classify as "searchable" (SHOULD retrieve ADRs) if the message is:
+            - Asking a substantive question about architecture, technology, or design decisions
+            - Requesting information, examples, or guidance about technical topics
+            - Describing a use case, requirement, or problem that could match ADR content
+            - Asking "what", "how", "why", "when", "where" questions about technical topics
+            - Requesting comparisons, recommendations, or best practices
+            - Any query that could reasonably match content in ADR documents
+            
+            Examples:
+            - "what queries have I asked?" → conversational (meta-question)
+            - "what technologies have we used for messaging?" → searchable (technical question)
+            - "thanks" → conversational (acknowledgment)
+            - "how do we handle authentication?" → searchable (technical question)
+            - "what can you do?" → conversational (system capability question)
+            - "what database should we use?" → searchable (technical decision question)
+            """
+            
+            classification_chain = ChatPromptTemplate.from_template(classification_prompt) | self.llm | StrOutputParser()
+            classification = classification_chain.invoke({}).strip().lower()
+            
+            if "conversational" in classification:
+                return {"is_searchable": False, "reason": "llm_classified_conversational"}
+            
+        except Exception as e:
+            # If LLM classification fails, default to allowing the query (fail open)
+            print(f"Query classification failed: {e}. Allowing query to proceed.")
+        
+        return {"is_searchable": True, "reason": None}
+
+    def _generate_conversational_response(
+        self, query: str, reason: str, conversation_history: Optional[List[Dict]] = None
+    ) -> Dict:
+        """
+        Generates a friendly conversational response for non-searchable queries.
+        Does not trigger ADR retrieval. Provides context-aware responses when appropriate.
+        """
+        query_lower = query.lower().strip()
+        
+        # Special handling for "thank you" after a response - make it warm and friendly
+        if reason == "thank_you_after_response" or (reason == "conversational_filler" and query_lower in {"thanks", "thank you", "thx"}):
+            if conversation_history:
+                # Check if we just provided a substantive response
+                for msg in reversed(conversation_history):
+                    if msg.get("role") == "assistant":
+                        assistant_content = msg.get("content", "")
+                        # If the last assistant message was substantive (not just a greeting)
+                        if len(assistant_content) > 50 and not assistant_content.startswith("<p>I'm here to help"):
+                            return {
+                                "query": query,
+                                "response": "<p>You're welcome! Happy to help. Feel free to ask if you need anything else about architecture decisions. 🚀</p>",
+                                "references": []
+                            }
+        
+        # Map reasons to appropriate responses
+        response_templates = {
+            "query_too_short": "<p>I'd be happy to help! Could you please provide more details about what you're looking for? 📌</p>",
+            "conversational_filler": "<p>Got it! Feel free to ask me anything about architecture decisions or ADRs. 🚀</p>",
+            "insufficient_words": "<p>I'd love to help! Could you provide a bit more detail about what you need? 💡</p>",
+            "meta_question": "<p>I'm focused on helping you find information about architecture decisions and ADRs. Ask me questions about technologies, design patterns, or architectural choices, and I'll search through the ADR knowledge base for relevant information. 🔍</p>",
+            "greeting_or_closing": "<p>Hello! I'm here to help you find information about architecture decisions and ADRs. What would you like to know? 🚀</p>",
+            "llm_classified_conversational": "<p>I'm here to help with questions about architecture decisions and ADRs. What would you like to know? 🔍</p>"
+        }
+        
+        # Default response if reason not in templates
+        default_response = "<p>I'm here to help! What would you like to know about architecture decisions? 🚀</p>"
+        
+        response_html = response_templates.get(reason, default_response)
+        
+        return {
+            "query": query,
+            "response": response_html,
+            "references": []  # No references for conversational responses
+        }
+
     def _clean_html_response(self, html_text: str) -> str:
         """
         Removes newline characters from HTML response to prevent unnecessary whitespace.
@@ -417,6 +600,78 @@ class ADRService:
         # Remove all newline characters (\n) from the HTML
         # This creates compact HTML without extra whitespace
         return html_text.replace('\n', '')
+
+    def _generate_no_results_response(
+        self, query: str, intent_info: QueryIntent, conversation_history: Optional[List[Dict]] = None
+    ) -> Dict:
+        """
+        Generates a helpful "no results" response with suggestions for reformulating the query.
+        Uses LLM to provide actionable guidance to the user.
+        """
+        # Build context about what was searched
+        search_context = f"User Query: {query}\n\n"
+        
+        if intent_info.technologies:
+            search_context += f"Technologies searched: {', '.join(intent_info.technologies)}\n"
+        if intent_info.domain:
+            search_context += f"Domain/Industry searched: {intent_info.domain}\n"
+        if intent_info.requirements:
+            search_context += f"Requirements searched: {', '.join(intent_info.requirements)}\n"
+        
+        search_context += "\nNo matching ADRs were found in the knowledge base."
+
+        # Create a prompt for generating helpful no-results response
+        no_results_prompt = f"""
+        You are a helpful AI assistant for an Architecture Decision Records (ADRs) knowledge base.
+        
+        The user searched for information but no relevant ADRs were found.
+        
+        Search Details:
+        {search_context}
+        
+        Generate a helpful, empathetic response that:
+        1. Acknowledges that no relevant ADRs were found
+        2. Suggests ways to reformulate the query (e.g., use different keywords, broader terms, related technologies)
+        3. Provide actionable next steps
+        4. Maintains a professional but friendly tone
+        
+        IMPORTANT RESTRICTIONS:
+        - DO NOT include any follow-up offers or invitations for further assistance
+        - DO NOT include phrases like "If you'd like, I can help...", "Just let me know...", "Feel free to ask...", or similar offers
+        - Keep the response focused on the current query and suggestions only
+        - End the response after providing the suggestions - do not add any closing offers
+        
+        Format the entire response as a single, valid HTML block following these requirements:
+        - CRITICAL: Generate compact HTML without newline characters (\\n) between tags
+        - Use <h2> or <h3> for section headings
+        - Use <ul> and <li> for suggestions and lists
+        - Use <p> tags for paragraphs
+        - Use appropriate emojis: 📌 for suggestions, 💡 for tips, 🔍 for search advice
+        - DO NOT include \\n characters anywhere - the HTML should be a single continuous string
+        - Write in a clear, conversational style similar to ChatGPT
+        
+        Example structure:
+        <h2>No Matching ADRs Found</h2>
+        <p>I couldn't find any ADRs matching your query...</p>
+        <h3>Suggestions</h3>
+        <ul><li>Try...</li></ul>
+        """
+        
+        prompt_template = ChatPromptTemplate.from_template(no_results_prompt)
+        
+        # Generate response using LLM
+        response_chain = prompt_template | self.llm | StrOutputParser()
+        response_text = response_chain.invoke({})
+        
+        # Clean up newline characters
+        response_text = self._clean_html_response(response_text)
+        
+        # Return response with empty references array - no ADRs were found
+        return {
+            "query": query,
+            "response": response_text,
+            "references": []  # Explicitly empty - no documents found, so no references to show
+        }
 
     def _get_dynamic_separators(self, text_content: str) -> list[str]:
         """
