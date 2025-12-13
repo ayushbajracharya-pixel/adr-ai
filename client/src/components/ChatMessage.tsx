@@ -18,21 +18,21 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
         isUser ? "justify-end" : "justify-start"
       )}
     >
-      {!isUser && (
+      {/* {!isUser && (
         <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary flex items-center justify-center">
           <Bot className="w-4 h-4 text-primary-foreground" />
         </div>
-      )}
+      )} */}
 
       <Card
         className={cn(
-          "max-w-[80%] p-4 shadow-message",
+          "max-w-[80%] py-2 px-4 rounded-3xl shadow-message",
           isUser
             ? "bg-chat-user text-chat-user-foreground"
-            : "bg-chat-assistant text-chat-assistant-foreground"
+            : "bg-transparent text-white"
         )}
       >
-        <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:text-foreground prose-a:text-primary">
+        <div className="prose text-base dark:prose-invert max-w-none prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:text-foreground prose-a:text-primary">
           <div
             dangerouslySetInnerHTML={{
               // Sanitize the HTML content before setting it
@@ -65,11 +65,11 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
         </div>
       </Card>
 
-      {isUser && (
+      {/* {isUser && (
         <div className="flex-shrink-0 w-8 h-8 rounded-full bg-muted flex items-center justify-center">
           <User className="w-4 h-4 text-muted-foreground" />
         </div>
-      )}
+      )} */}
     </div>
   );
 };
