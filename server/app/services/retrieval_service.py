@@ -8,6 +8,7 @@ from typing import Dict, List, Any, Optional
 from app.config.settings import settings
 from app.services.hybrid_retriever import HybridRetriever
 from app.services.query_classifier import QueryClassifier
+from app.utils.text_cleaner import normalize_technology_name, normalize_domain, normalize_status
 
 
 def get_hybrid_retriever(
@@ -53,15 +54,18 @@ def _get_simple_retriever(
     filter_conditions: List[Dict[str, Any]] = []
 
     # Filter by technologies using boolean flags
+    # Use the same normalization as during storage to ensure consistent matching
     if query_intent.get("technologies"):
         technologies: List[str] = query_intent["technologies"]
         for tech in technologies:
-            filter_conditions.append({f"tech_{tech.lower()}": {"$eq": True}})
+            normalized_tech = normalize_technology_name(tech)
+            filter_conditions.append({f"tech_{normalized_tech}": {"$eq": True}})
 
-    # Filter by domain (if provided)
+    # Filter by domain (if provided) - normalize for consistent matching
     if query_intent.get("domain"):
         domain: str = query_intent["domain"]
-        filter_conditions.append({"domain": {"$eq": domain}})
+        normalized_domain = normalize_domain(domain)
+        filter_conditions.append({"domain": {"$eq": normalized_domain}})
 
     # Combine all conditions with a logical $and
     combined_filter: Optional[Dict[str, Any]] = None
