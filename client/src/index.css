@@ -123,3 +123,37 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer components {
+  /* Custom prose styling - reduce margins for cleaner chat messages */
+  .prose h2 {
+    margin-top: 0.75rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .prose h3 {
+    margin-top: 0.75rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .prose p {
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .prose ul,
+  .prose ol {
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .prose li {
+    margin-top: 0.25rem;
+    margin-bottom: 0.25rem;
+  }
+
+  /* Remove top margin from first element */
+  .prose > *:first-child {
+    margin-top: 0;
+  }
+}

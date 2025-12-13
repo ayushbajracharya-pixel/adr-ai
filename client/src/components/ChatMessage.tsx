@@ -15,7 +15,7 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
     <div
       className={cn(
         "flex gap-4 animate-fade-in",
-        isUser ? "justify-end" : "justify-start"
+        isUser ? "justify-end" : "justify-start w-full"
       )}
     >
       {/* {!isUser && (
@@ -26,10 +26,10 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
 
       <Card
         className={cn(
-          "max-w-[80%] py-2 px-4 rounded-3xl shadow-message",
+          "py-2 px-4 rounded-3xl shadow-message",
           isUser
-            ? "bg-chat-user text-chat-user-foreground"
-            : "bg-transparent text-white"
+            ? "max-w-[80%] bg-chat-user text-chat-user-foreground"
+            : "w-full bg-transparent text-white border-none"
         )}
       >
         <div className="prose text-base dark:prose-invert max-w-none prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:text-foreground prose-a:text-primary">

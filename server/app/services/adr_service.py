@@ -184,6 +184,9 @@ class ADRService:
         )
 
         response_text = rag_chain.invoke({"context": context_str, "question": query})
+        
+        # Clean up newline characters from the HTML response
+        response_text = self._clean_html_response(response_text)
 
         # Step 5: Process and format the references
         references = self._create_enhanced_references(retrieved_docs)
@@ -299,6 +302,9 @@ class ADRService:
         base_prompt = """
         You are an expert AI assistant helping with technology decisions based on Architecture Decision Records (ADRs) from past projects.
 
+        Your job is to answer questions using only the provided ADR context.
+        You must be concise, structured, and professional.
+
         Context from ADRs:
         {context}
         """
@@ -345,12 +351,23 @@ class ADRService:
         INSTRUCTIONS:
         Based on the provided context and conversation history, generate a detailed and comprehensive answer to the user's query.
         Consider the conversation history to provide contextually relevant responses that build upon previous discussions.
-        Format the entire response as a single, valid HTML block. Do not include any text outside of the HTML tags.
-        Use appropriate HTML tags for headings (<h2>, <h3>), paragraphs (<p>), lists (<ul>, <li>), and bolding (<b> or <strong>).
-        Ensure the response is clean and ready to be rendered in a web browser.
+        
+        RESPONSE FORMAT REQUIREMENTS:
+        - Format the entire response as a single, valid HTML block. Do not include any text outside of the HTML tags.
+        - CRITICAL: Generate compact HTML without newline characters (\n) between tags. Write the HTML as a continuous string without line breaks.
+        - Use clear section headings with <h2> or <h3> tags to organize content logically
+        - Use bullet points (<ul> and <li>) for lists, recommendations, and key points - avoid long paragraphs when lists are more appropriate
+        - Use appropriate emojis where helpful: 🚀 for recommendations/actions, 📌 for important points, ⚠️ for warnings/cautions, ✅ for confirmations/benefits
+        - Use <p> tags for paragraphs, <b> or <strong> for emphasis
+        - DO NOT include \n characters anywhere in your response - the HTML should be a single continuous string
+        - DO NOT add unnecessary line breaks or extra whitespace between HTML elements
+        - DO NOT invent information that is not present in the provided context
+        - DO NOT repeat the same information multiple times - be concise and avoid redundancy
+        - Write in a clear, conversational style similar to ChatGPT - professional but approachable
+        - Ensure the response is clean and ready to be rendered in a web browser
 
         If no relevant ADRs are found in the context, your response should be a simple HTML paragraph:
-        <p>Sorry, there has been such implementations.</p>
+        <p>Sorry, there has been no such implementations.</p>
         """
         return ChatPromptTemplate.from_template(base_prompt)
 
@@ -391,6 +408,15 @@ class ADRService:
             }
             references.append(ref)
         return references
+
+    def _clean_html_response(self, html_text: str) -> str:
+        """
+        Removes newline characters from HTML response to prevent unnecessary whitespace.
+        Preserves spaces within text content but removes newlines between tags.
+        """
+        # Remove all newline characters (\n) from the HTML
+        # This creates compact HTML without extra whitespace
+        return html_text.replace('\n', '')
 
     def _get_dynamic_separators(self, text_content: str) -> list[str]:
         """
