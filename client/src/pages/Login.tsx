@@ -10,13 +10,13 @@ const Login = () => {
   const error = searchParams.get('error');
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
-      <div className="max-w-md w-full space-y-8 p-10 bg-white dark:bg-gray-800 rounded-lg shadow-lg">
+    <div className="min-h-screen w-full flex items-center justify-center bg-gradient-chat">
+      <div className="max-w-md w-full space-y-8 p-10 bg-card rounded-lg shadow-lg border">
         <div className="text-center">
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
+          <h2 className="text-3xl font-bold text-foreground">
             Welcome to ADR AI
           </h2>
-          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+          <p className="mt-2 text-sm text-muted-foreground">
             Sign in with your Google account to continue
           </p>
         </div>
@@ -32,8 +32,9 @@ const Login = () => {
         <div className="mt-8">
           <Button
             onClick={login}
-            className="w-full flex items-center justify-center gap-3 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600"
+            className="w-full flex items-center justify-center gap-3"
             size="lg"
+            variant="outline"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24">
               <path

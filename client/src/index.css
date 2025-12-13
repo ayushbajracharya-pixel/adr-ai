@@ -31,6 +31,32 @@
     --chart-3: 197 37% 24%;
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
+    
+    /* Chat colors */
+    --chat-user: 142.1 76.2% 36.3%;
+    --chat-user-foreground: 355.7 100% 97.3%;
+    --chat-assistant: 240 4.8% 95.9%;
+    --chat-assistant-foreground: 240 5.9% 10%;
+    --chat-input: 0 0% 100%;
+    --chat-input-foreground: 240 10% 3.9%;
+    
+    /* Sidebar colors */
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.9% 10%;
+    --sidebar-primary: 142.1 76.2% 36.3%;
+    --sidebar-primary-foreground: 355.7 100% 97.3%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 240 5.9% 90%;
+    --sidebar-ring: 142.1 76.2% 36.3%;
+    
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(142.1 76.2% 36.3%) 0%, hsl(142.1 70% 45%) 100%);
+    --gradient-chat: linear-gradient(135deg, hsl(0 0% 98%) 0%, hsl(240 4.8% 95.9%) 100%);
+    
+    /* Shadows */
+    --shadow-chat: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    --shadow-message: 0 2px 4px rgba(0, 0, 0, 0.1);
   }
 
   .dark {
@@ -58,6 +84,32 @@
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
+    
+    /* Chat colors - dark mode */
+    --chat-user: 142.1 70.6% 45.3%;
+    --chat-user-foreground: 144.9 80.4% 10%;
+    --chat-assistant: 240 3.7% 15.9%;
+    --chat-assistant-foreground: 0 0% 98%;
+    --chat-input: 24 9.8% 10%;
+    --chat-input-foreground: 0 0% 95%;
+    
+    /* Sidebar colors - dark mode */
+    --sidebar-background: 20 14.3% 4.1%;
+    --sidebar-foreground: 0 0% 95%;
+    --sidebar-primary: 142.1 70.6% 45.3%;
+    --sidebar-primary-foreground: 144.9 80.4% 10%;
+    --sidebar-accent: 12 6.5% 15.1%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 142.4 71.8% 29.2%;
+    
+    /* Gradients - dark mode */
+    --gradient-primary: linear-gradient(135deg, hsl(142.1 70.6% 45.3%) 0%, hsl(142.1 65% 50%) 100%);
+    --gradient-chat: linear-gradient(135deg, hsl(20 14.3% 4.1%) 0%, hsl(24 9.8% 10%) 100%);
+    
+    /* Shadows - dark mode */
+    --shadow-chat: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+    --shadow-message: 0 2px 4px rgba(0, 0, 0, 0.3);
   }
 }
 
