@@ -43,7 +43,8 @@ export const FileDropzone = ({
       <input
         ref={fileInputRef}
         type="file"
-        accept=".pdf,.docx,.md"
+        accept=".pdf,.docx,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/markdown"
+        multiple
         onChange={onFileInput}
         className="hidden"
       />
