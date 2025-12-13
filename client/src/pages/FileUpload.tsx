@@ -15,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const FileUpload = () => {
   const {
@@ -54,6 +55,7 @@ const FileUpload = () => {
           </div>
 
           <div className="flex items-center gap-2">
+            <ThemeToggle />
             <Link to={uiRoutes.index}>
               <Button variant="outline" className="gap-2">
                 <MessageCircle className="h-4 w-4" />

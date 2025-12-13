@@ -35,21 +35,21 @@ const AuthCallback = () => {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
-          <h2 className="text-2xl font-semibold mb-4 text-red-600">{error}</h2>
-          <p className="text-gray-600 dark:text-gray-400">Redirecting to login...</p>
+          <h2 className="text-2xl font-semibold mb-4 text-destructive">{error}</h2>
+          <p className="text-muted-foreground">Redirecting to login...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center">
+    <div className="min-h-screen w-full flex items-center justify-center bg-background">
       <div className="text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 dark:border-white mx-auto mb-4"></div>
-        <h2 className="text-2xl font-semibold mb-4">Completing sign in...</h2>
-        <p className="text-gray-600 dark:text-gray-400">Please wait while we redirect you.</p>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+        <h2 className="text-2xl font-semibold mb-4 text-foreground">Completing sign in...</h2>
+        <p className="text-muted-foreground">Please wait while we redirect you.</p>
       </div>
     </div>
   );

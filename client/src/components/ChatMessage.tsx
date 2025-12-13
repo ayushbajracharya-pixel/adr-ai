@@ -32,7 +32,7 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
             : "bg-chat-assistant text-chat-assistant-foreground"
         )}
       >
-        <div className="prose prose-sm max-w-none">
+        <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:text-foreground prose-a:text-primary">
           <div
             dangerouslySetInnerHTML={{
               // Sanitize the HTML content before setting it

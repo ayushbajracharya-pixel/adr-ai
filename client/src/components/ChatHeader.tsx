@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 interface ChatHeaderProps {
   onClearMessages: () => void;
@@ -51,6 +52,7 @@ export const ChatHeader = ({
       </div>
 
       <div className="flex items-center gap-2">
+        <ThemeToggle />
         {messageCount > 0 && (
           <Button
             variant="ghost"
