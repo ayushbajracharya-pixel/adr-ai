@@ -33,8 +33,8 @@
     --chart-5: 27 87% 67%;
     
     /* Chat colors */
-    --chat-user: 142.1 76.2% 36.3%;
-    --chat-user-foreground: 355.7 100% 97.3%;
+    --chat-user: 240 5.9% 90%;
+    --chat-user-foreground: 240 5.9% 10%;
     --chat-assistant: 240 4.8% 95.9%;
     --chat-assistant-foreground: 240 5.9% 10%;
     --chat-input: 0 0% 100%;
@@ -86,8 +86,8 @@
     --chart-5: 340 75% 55%;
     
     /* Chat colors - dark mode */
-    --chat-user: 142.1 70.6% 45.3%;
-    --chat-user-foreground: 144.9 80.4% 10%;
+    --chat-user: 240 3.7% 20%;
+    --chat-user-foreground: 0 0% 98%;
     --chat-assistant: 240 3.7% 15.9%;
     --chat-assistant-foreground: 0 0% 98%;
     --chat-input: 24 9.8% 10%;

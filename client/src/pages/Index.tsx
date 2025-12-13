@@ -35,6 +35,7 @@ const Index = () => {
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [conversationToDelete, setConversationToDelete] = useState<string | null>(null);
+  const [isInitialLoading, setIsInitialLoading] = useState(false);
   
   const queryClient = useQueryClient();
   const { conversations, isLoading: conversationsLoading, createConversation, deleteConversation, isDeleting } = useConversations();
@@ -44,6 +45,7 @@ const Index = () => {
   const handleSendMessage = async (message: string) => {
     if (!currentConversationId) {
       // Create a new conversation first, then send message
+      setIsInitialLoading(true);
       try {
         const newConv = await createConversation({ title: null });
         setCurrentConversationId(newConv.id);
@@ -55,9 +57,11 @@ const Index = () => {
           queryClient.invalidateQueries({ queryKey: ['conversations'] });
         } catch (error) {
           console.error("Failed to send message:", error);
+          setIsInitialLoading(false);
         }
       } catch (error) {
         console.error("Failed to create conversation:", error);
+        setIsInitialLoading(false);
       }
     } else {
       // Send message using existing conversation
@@ -77,6 +81,13 @@ const Index = () => {
       }
     }
   }, [messages]);
+
+  // Reset initial loading state when messages arrive
+  useEffect(() => {
+    if (messages.length > 0 && isInitialLoading) {
+      setIsInitialLoading(false);
+    }
+  }, [messages, isInitialLoading]);
 
   // Create new conversation
   const handleNewConversation = async () => {
@@ -185,9 +196,34 @@ const Index = () => {
           </Link>
         </div>
 
-        <div className="flex-1 flex flex-col min-h-0">
+        <div className="flex-1 flex flex-col min-h-0 max-w-5xl w-full mx-auto">
           {messages.length === 0 ? (
-            <EmptyState />
+            isLoading || isInitialLoading ? (
+              <ScrollArea className="flex-1 p-4">
+                <div className="space-y-6">
+                  <div className="flex justify-start">
+                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary flex items-center justify-center mr-4">
+                      <div className="w-4 h-4 bg-primary-foreground rounded-full animate-pulse" />
+                    </div>
+                    <div className="bg-chat-assistant rounded-lg p-4 shadow-message">
+                      <div className="flex space-x-1">
+                        <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" />
+                        <div
+                          className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"
+                          style={{ animationDelay: "0.1s" }}
+                        />
+                        <div
+                          className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"
+                          style={{ animationDelay: "0.2s" }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </ScrollArea>
+            ) : (
+              <EmptyState />
+            )
           ) : (
             <ScrollArea ref={scrollAreaRef} className="flex-1 p-4">
               <div className="space-y-6">
@@ -220,7 +256,7 @@ const Index = () => {
 
           <ChatInput
             onSendMessage={handleSendMessage}
-            isLoading={isLoading || conversationsLoading}
+            isLoading={isLoading || isInitialLoading || conversationsLoading}
             placeholder="Type your message..."
           />
         </div>
