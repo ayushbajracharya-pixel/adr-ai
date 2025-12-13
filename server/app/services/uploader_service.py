@@ -75,11 +75,16 @@ class UploaderService:
             print(
                 f"Uploading file-like object to S3 bucket '{self.bucket_name}' as '{object_name}'..."
             )
+            # Set ACL to public-read for LocalStack compatibility
+            extra_args = {
+                "ContentType": content_type,
+                "ACL": "public-read"
+            }
             self.s3_client.upload_fileobj(
                 file_obj,
                 self.bucket_name,
                 object_name,
-                ExtraArgs={"ContentType": content_type},
+                ExtraArgs=extra_args,
             )
             s3_uri = self.get_s3_uri(object_name)
             public_url = self._get_public_url(object_name)
@@ -176,4 +181,17 @@ class UploaderService:
         # Ensure the object key is URL-encoded for special characters
         encoded_object_key = quote(object_key, safe="/")
 
-        return f"https://{self.bucket_name}.s3.{self.region}.amazonaws.com/{encoded_object_key}"
+        # Use LocalStack endpoint if configured, otherwise use AWS S3 format
+        if settings.AWS_ENDPOINT_URL:
+            # For LocalStack, construct URL using the endpoint
+            endpoint = settings.AWS_ENDPOINT_URL.rstrip('/')
+            # Convert 'localstack' hostname to 'localhost' for browser access
+            # This handles the case where the endpoint is http://localstack:4566
+            # but browsers need http://localhost:4566
+            if 'localstack' in endpoint and 'localhost' not in endpoint:
+                endpoint = endpoint.replace('localstack', 'localhost')
+            # LocalStack format: http://localhost:4566/bucket-name/object-key
+            return f"{endpoint}/{self.bucket_name}/{encoded_object_key}"
+        else:
+            # AWS S3 format
+            return f"https://{self.bucket_name}.s3.{self.region}.amazonaws.com/{encoded_object_key}"

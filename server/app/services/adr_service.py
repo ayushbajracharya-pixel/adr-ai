@@ -437,6 +437,27 @@ class ADRService:
 
         for doc in unique_docs:
             metadata: Dict[str, Any] = doc.metadata
+            s3_uri = metadata.get("s3_uri", "Unknown")
+            
+            # Regenerate public_url from s3_uri to ensure it uses the correct endpoint (LocalStack or AWS)
+            # s3_uri format: s3://bucket-name/object-key
+            public_url = "Unknown"
+            if s3_uri != "Unknown" and s3_uri.startswith("s3://"):
+                try:
+                    # Extract object_key from s3_uri (everything after s3://bucket-name/)
+                    parts = s3_uri.replace("s3://", "").split("/", 1)
+                    if len(parts) == 2:
+                        object_key = parts[1]
+                        # Use uploader_service to generate the correct URL
+                        public_url = self.uploader_service._get_public_url(object_key)
+                except Exception as e:
+                    print(f"Warning: Could not regenerate URL from s3_uri {s3_uri}: {e}")
+                    # Fallback to stored public_url if regeneration fails
+                    public_url = metadata.get("public_url", "Unknown")
+            else:
+                # Fallback to stored public_url if s3_uri is invalid
+                public_url = metadata.get("public_url", "Unknown")
+            
             ref: Dict[str, str] = {
                 "filename": metadata.get("filename", "Unknown"),
                 "adr_number": metadata.get("adr_number", "Unknown"),
@@ -445,8 +466,8 @@ class ADRService:
                 "author": metadata.get("author", "Unknown"),
                 "date": metadata.get("date", "Unknown"),
                 "source": metadata.get("source", "N/A"),
-                "public_url": metadata.get("public_url", "Unknown"),
-                "s3_uri": metadata.get("s3_uri", "Unknown"),
+                "public_url": public_url,
+                "s3_uri": s3_uri,
             }
             references.append(ref)
         return references

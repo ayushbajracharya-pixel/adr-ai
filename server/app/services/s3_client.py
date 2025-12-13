@@ -26,12 +26,33 @@ class S3Client:
             cls._instance.client = boto3.client("s3", **client_kwargs)
             
             # Create bucket if using LocalStack and bucket doesn't exist
+            # Also ensure bucket is public for LocalStack
             if settings.AWS_ENDPOINT_URL:
+                bucket_exists = False
                 try:
                     cls._instance.client.head_bucket(Bucket=settings.S3_BUCKET_NAME)
+                    bucket_exists = True
                 except cls._instance.client.exceptions.ClientError:
                     # Bucket doesn't exist, create it
                     cls._instance.client.create_bucket(Bucket=settings.S3_BUCKET_NAME)
+                
+                # Make bucket public for LocalStack (whether it existed or was just created)
+                try:
+                    # Disable block public access
+                    cls._instance.client.delete_public_access_block(
+                        Bucket=settings.S3_BUCKET_NAME
+                    )
+                except cls._instance.client.exceptions.ClientError:
+                    pass  # May not exist, that's fine
+                
+                # Set bucket ACL to public-read
+                try:
+                    cls._instance.client.put_bucket_acl(
+                        Bucket=settings.S3_BUCKET_NAME,
+                        ACL="public-read"
+                    )
+                except cls._instance.client.exceptions.ClientError:
+                    pass  # May fail, but that's okay
         return cls._instance
 
     def get_client(self):
