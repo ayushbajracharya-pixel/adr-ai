@@ -1,4 +1,4 @@
-from fastapi import HTTPException
+from fastapi import HTTPException, UploadFile
 from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
@@ -16,7 +16,7 @@ from app.utils.text_cleaner import (
 import pypdfium2 as pdfium
 import docx
 from io import BytesIO
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any, Union, Set
 from botocore.exceptions import ClientError
 
 from app.config.settings import settings
@@ -30,27 +30,43 @@ collection_name = "adr_collection"
 
 
 class ADRService:
-    def __init__(self):
+    def __init__(self) -> None:
+        """Initialize the ADRService with embeddings, vector store, LLM, and services."""
         self.embeddings = OpenAIEmbeddings(openai_api_key=settings.OPENAI_API_KEY)
-        self.client = chromadb.HttpClient(host=settings.CHROMADB_HOST, port=settings.CHROMADB_PORT)
+        self.client = chromadb.HttpClient(
+            host=settings.CHROMADB_HOST, port=settings.CHROMADB_PORT
+        )
         self.vector_store = Chroma(
             client=self.client,
             collection_name=collection_name,
             embedding_function=self.embeddings,
         )
         self.llm = ChatOpenAI(
-            model="gpt-4.1-nano",
-            temperature=0.1,
+            model=settings.LLM_MODEL_NAME,
+            temperature=settings.LLM_TEMPERATURE,
             openai_api_key=settings.OPENAI_API_KEY,
         )
         self.extraction_chain = ExtractionChain()
         self.uploader_service = UploaderService()
 
-    async def process_adr(self, file):
-        """Process uploaded ADR and add to knowledge base"""
+    async def process_adr(self, file: UploadFile) -> List[str]:
+        """
+        Process uploaded ADR and add to knowledge base.
 
-        file_name = file.filename
-        content = await file.read()
+        Args:
+            file: The uploaded file to process
+
+        Returns:
+            List of document IDs added to the vector store
+
+        Raises:
+            HTTPException: If any step of processing fails
+        """
+        file_name: Optional[str] = file.filename
+        if not file_name:
+            raise HTTPException(status_code=400, detail="File must have a filename")
+        
+        content: bytes = await file.read()
 
         # Step 1: Upload to S3 with specific error handling
         s3_uri = None
@@ -113,7 +129,9 @@ class ADRService:
 
             # Initialize the splitter with the dynamic separators
             text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=1000, chunk_overlap=200, separators=dynamic_separators
+                chunk_size=settings.CHUNK_SIZE,
+                chunk_overlap=settings.CHUNK_OVERLAP,
+                separators=dynamic_separators,
             )
 
             document = Document(
@@ -137,8 +155,10 @@ class ADRService:
             )
 
     async def query_adr(
-        self, query: str, conversation_history: Optional[List[Dict]] = None
-    ) -> Dict:
+        self,
+        query: str,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
+    ) -> Dict[str, Any]:
         """
         Main function to process a user query, extract intent,
         perform hybrid retrieval, and generate a comprehensive response.
@@ -170,8 +190,7 @@ class ADRService:
 
         # If no results, generate a helpful "no results" response
         if not retrieved_docs:
-            if not retrieved_docs:
-                return self._generate_no_results_response(query, intent_info, conversation_history)
+            return self._generate_no_results_response(query, intent_info, conversation_history)
 
         # Step 3: Create the enhanced prompt using the intent info and conversation history
         prompt_template = self._create_enhanced_prompt(intent_info, conversation_history)
@@ -198,7 +217,7 @@ class ADRService:
         # Combine the generated response and references
         return {"query": query, "response": response_text, "references": references}
 
-    async def delete_file(self, object_key: str):
+    async def delete_file(self, object_key: str) -> Dict[str, str]:
         # object_key = "adr_uploads/ADR-0001_ Use Kafka for Messaging in Microservices Architecture.pdf"
         try:
             s3_uri = self.uploader_service.get_s3_uri(object_key)
@@ -243,12 +262,12 @@ class ADRService:
         try:
             # pypdfium2's PdfDocument can directly accept a file-like object (BytesIO)
             pdf = pdfium.PdfDocument(file_obj)
-            text_content = []
+            text_content: List[str] = []
 
             for page_num in range(len(pdf)):
                 page = pdf[page_num]
                 textpage = page.get_textpage()
-                text = textpage.get_text_range()
+                text: str = textpage.get_text_range()
                 text_content.append(text)
 
                 # Clean up
@@ -266,7 +285,7 @@ class ADRService:
         try:
             # python-docx's Document can also accept a file-like object
             doc = docx.Document(file_obj)
-            text_content = []
+            text_content: List[str] = []
 
             for paragraph in doc.paragraphs:
                 if paragraph.text.strip():
@@ -281,8 +300,7 @@ class ADRService:
         self, file_content: bytes, filename: str
     ) -> str:
         """Extract text based on file extension from in-memory content."""
-
-        file_ext = filename.lower().split(".")[-1]
+        file_ext: str = filename.lower().split(".")[-1]
 
         # Create an in-memory file object from the binary content.
         # This is a key step to make file-path-based libraries work.
@@ -299,7 +317,9 @@ class ADRService:
             raise Exception(f"Unsupported file format: {file_ext}")
 
     def _create_enhanced_prompt(
-        self, intent_info: QueryIntent, conversation_history: Optional[List[Dict]] = None
+        self,
+        intent_info: QueryIntent,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
     ) -> ChatPromptTemplate:
         """Creates a contextual prompt template for generation."""
         # This is where you insert your well-crafted prompt instructions
@@ -316,12 +336,13 @@ class ADRService:
         # Add conversation history if available
         if conversation_history:
             base_prompt += "\n\nPrevious Conversation History:\n"
-            for msg in conversation_history[-10:]:  # Include last 10 messages for context
+            # Include last N messages for context
+            for msg in conversation_history[-settings.CONVERSATION_HISTORY_LIMIT :]:
                 role = "User" if msg.get("role") == "user" else "Assistant"
                 content = msg.get("content", "")
                 # Truncate very long messages
-                if len(content) > 500:
-                    content = content[:500] + "..."
+                if len(content) > settings.MESSAGE_TRUNCATE_LENGTH:
+                    content = content[: settings.MESSAGE_TRUNCATE_LENGTH] + "..."
                 base_prompt += f"{role}: {content}\n"
             base_prompt += "\n"
 
@@ -377,29 +398,31 @@ class ADRService:
 
     def _format_docs(self, docs: List[Document]) -> str:
         """Formats retrieved documents into a single string for the prompt."""
-        formatted = ""
+        formatted: str = ""
         for doc in docs:
-            metadata = doc.metadata
+            metadata: Dict[str, Any] = doc.metadata
             formatted += f"--- ADR: {metadata.get('title', 'Unknown Title')} ({metadata.get('adr_number', 'Unknown')}) ---\n"
             formatted += f"Source: {metadata.get('source', 'N/A')}\n"
             formatted += f"Content: {doc.page_content}\n\n"
         return formatted
 
-    def _create_enhanced_references(self, docs: List[Document]) -> List[Dict]:
+    def _create_enhanced_references(
+        self, docs: List[Document]
+    ) -> List[Dict[str, str]]:
         """Creates unique, detailed references from retrieved documents."""
-        references = []
-        seen_files = set()
+        references: List[Dict[str, str]] = []
+        seen_files: Set[str] = set()
 
         # A simple way to get unique documents, more advanced scoring can be added here
-        unique_docs = []
+        unique_docs: List[Document] = []
         for doc in docs:
             if doc.metadata.get("filename") not in seen_files:
                 unique_docs.append(doc)
                 seen_files.add(doc.metadata.get("filename"))
 
         for doc in unique_docs:
-            metadata = doc.metadata
-            ref = {
+            metadata: Dict[str, Any] = doc.metadata
+            ref: Dict[str, str] = {
                 "filename": metadata.get("filename", "Unknown"),
                 "adr_number": metadata.get("adr_number", "Unknown"),
                 "title": metadata.get("title", "Unknown Title"),
@@ -413,7 +436,11 @@ class ADRService:
             references.append(ref)
         return references
 
-    def _validate_query_quality(self, query: str, conversation_history: Optional[List[Dict]] = None) -> Dict[str, any]:
+    def _validate_query_quality(
+        self,
+        query: str,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
+    ) -> Dict[str, Any]:
         """
         Validates if a query is searchable and should trigger ADR retrieval.
         Uses comprehensive heuristics and LLM-based classification.
@@ -490,11 +517,15 @@ class ADRService:
             # Build context about conversation history if available
             history_context = ""
             if conversation_history:
-                recent_messages = conversation_history[-4:]  # Last 4 messages for context
+                recent_messages = conversation_history[
+                    -settings.MAX_RECENT_MESSAGES :
+                ]  # Last N messages for context
                 history_context = "\n\nRecent conversation context:\n"
                 for msg in recent_messages:
                     role = "User" if msg.get("role") == "user" else "Assistant"
-                    content = msg.get("content", "")[:200]  # Truncate long messages
+                    content = msg.get("content", "")[
+                        : settings.MESSAGE_PREVIEW_LENGTH
+                    ]  # Truncate long messages
                     history_context += f"{role}: {content}\n"
             
             classification_prompt = f"""
@@ -548,8 +579,11 @@ class ADRService:
         return {"is_searchable": True, "reason": None}
 
     def _generate_conversational_response(
-        self, query: str, reason: str, conversation_history: Optional[List[Dict]] = None
-    ) -> Dict:
+        self,
+        query: str,
+        reason: str,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
+    ) -> Dict[str, Any]:
         """
         Generates a friendly conversational response for non-searchable queries.
         Does not trigger ADR retrieval. Provides context-aware responses when appropriate.
@@ -602,8 +636,11 @@ class ADRService:
         return html_text.replace('\n', '')
 
     def _generate_no_results_response(
-        self, query: str, intent_info: QueryIntent, conversation_history: Optional[List[Dict]] = None
-    ) -> Dict:
+        self,
+        query: str,
+        intent_info: QueryIntent,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
+    ) -> Dict[str, Any]:
         """
         Generates a helpful "no results" response with suggestions for reformulating the query.
         Uses LLM to provide actionable guidance to the user.
@@ -673,7 +710,7 @@ class ADRService:
             "references": []  # Explicitly empty - no documents found, so no references to show
         }
 
-    def _get_dynamic_separators(self, text_content: str) -> list[str]:
+    def _get_dynamic_separators(self, text_content: str) -> List[str]:
         """
         Dynamically generates a list of separators based on recognized ADR section headings.
         This version uses a single, cleaner data structure to manage canonical headings and synonyms.

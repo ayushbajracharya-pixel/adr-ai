@@ -1,30 +1,71 @@
 from langchain_core.output_parsers import JsonOutputParser, PydanticOutputParser
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import Runnable
+from typing import Dict, Any
 
 from app.models.schemas import ADRMetadata, QueryIntent
+from app.config.settings import settings
 
 
 class ExtractionChain:
-    def __init__(self, model_name="gpt-4.1-nano", temperature=0):
-        self.model = ChatOpenAI(model=model_name, temperature=temperature,
+    def __init__(
+        self,
+        model_name: str = settings.EXTRACTION_MODEL_NAME,
+        temperature: float = settings.EXTRACTION_TEMPERATURE,
+    ) -> None:
+        """
+        Initialize the ExtractionChain with configurable model and temperature.
+
+        Args:
+            model_name: The OpenAI model name to use for extraction
+            temperature: The temperature setting for the LLM (0.0 for deterministic)
+        """
+        self.model = ChatOpenAI(
+            model=model_name,
+            temperature=temperature,
         )
 
-        self.intent_chain = self._get_intent_extraction_chain()
-        self.metadata_chain = self._get_metadata_extraction_chain()
+        self.intent_chain: Runnable[Dict[str, str], QueryIntent] = (
+            self._get_intent_extraction_chain()
+        )
+        self.metadata_chain: Runnable[Dict[str, str], ADRMetadata] = (
+            self._get_metadata_extraction_chain()
+        )
 
     def invoke_intent_chain(self, query: str) -> QueryIntent:
+        """
+        Extract query intent from a user query.
+
+        Args:
+            query: The user's query string
+
+        Returns:
+            QueryIntent object containing extracted technologies, requirements, etc.
+        """
         return self.intent_chain.invoke({"query": query})
 
     def invoke_metadata_chain(self, text: str) -> ADRMetadata:
-        return self.metadata_chain.invoke(
-            {
-                "text": text,
-            }
-        )
+        """
+        Extract metadata from ADR document text.
 
-    def _get_intent_extraction_chain(self):
-        """Builds and returns a LangChain chain for extracting query intent."""
+        Args:
+            text: The full text content of an ADR document
+
+        Returns:
+            ADRMetadata object containing extracted metadata
+        """
+        return self.metadata_chain.invoke({"text": text})
+
+    def _get_intent_extraction_chain(
+        self,
+    ) -> Runnable[Dict[str, str], QueryIntent]:
+        """
+        Builds and returns a LangChain chain for extracting query intent.
+
+        Returns:
+            A Runnable chain that takes a query dict and returns QueryIntent
+        """
         parser = PydanticOutputParser(pydantic_object=QueryIntent)
 
         prompt = ChatPromptTemplate.from_messages(
@@ -41,8 +82,15 @@ class ExtractionChain:
 
         return prompt | self.model | parser
 
-    def _get_metadata_extraction_chain(self):
-        """Builds and returns a LangChain chain for extracting metadata."""
+    def _get_metadata_extraction_chain(
+        self,
+    ) -> Runnable[Dict[str, str], ADRMetadata]:
+        """
+        Builds and returns a LangChain chain for extracting metadata.
+
+        Returns:
+            A Runnable chain that takes a text dict and returns ADRMetadata
+        """
         parser = JsonOutputParser(pydantic_object=ADRMetadata)
 
         prompt = ChatPromptTemplate.from_messages(

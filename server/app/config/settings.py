@@ -36,6 +36,26 @@ class Settings(BaseSettings):
     LANGCHAIN_API_KEY: Optional[str] = None  # LangSmith API key
     LANGCHAIN_PROJECT: Optional[str] = None  # LangSmith project name
 
+    # LLM Configuration
+    LLM_MODEL_NAME: str = "gpt-4.1-nano"  # Model name for query generation
+    LLM_TEMPERATURE: float = 0.1  # Temperature for query generation LLM
+    EXTRACTION_MODEL_NAME: str = "gpt-4.1-nano"  # Model name for extraction chains
+    EXTRACTION_TEMPERATURE: float = 0.0  # Temperature for extraction chains
+
+    # Retrieval Configuration
+    RETRIEVAL_K: int = 5  # Number of documents to retrieve
+    RETRIEVAL_SEARCH_TYPE: str = "similarity"  # Search type for retrieval
+
+    # Text Splitting Configuration
+    CHUNK_SIZE: int = 1000  # Character size for document chunks
+    CHUNK_OVERLAP: int = 200  # Character overlap between chunks
+
+    # Conversation History Configuration
+    CONVERSATION_HISTORY_LIMIT: int = 10  # Max messages to include in prompt
+    MESSAGE_TRUNCATE_LENGTH: int = 500  # Max characters per message in prompt
+    MAX_RECENT_MESSAGES: int = 4  # Max recent messages for query validation
+    MESSAGE_PREVIEW_LENGTH: int = 200  # Max characters for message preview in validation
+
     class Config:
         env_file = ".env"  # Specifies the name of the .env file
 
