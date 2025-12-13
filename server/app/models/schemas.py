@@ -30,21 +30,45 @@ class QueryIntent(BaseModel):
     """Structured representation of the user's project query intent."""
 
     technologies: List[str] = Field(
-        ..., description="List of explicitly mentioned or inferred technologies."
+        default_factory=list,
+        description="List of explicitly mentioned or inferred technologies.",
     )
     requirements: List[str] = Field(
-        ..., description="List of key technical or business requirements."
+        default_factory=list,
+        description="List of key technical or business requirements.",
     )
     domain: Optional[str] = Field(
         None,
         description="The industry or domain of the project (e.g., healthcare, finance).",
     )
     compliance_needs: List[str] = Field(
-        ..., description="Regulatory compliance needs like HIPAA, GDPR, or PCI-DSS."
+        default_factory=list,
+        description="Regulatory compliance needs like HIPAA, GDPR, or PCI-DSS.",
     )
     use_case: Optional[str] = Field(
         None,
         description="The primary use case of the application (e.g., chat application, telemedicine).",
+    )
+    # Metadata filters for list and filter queries
+    author: Optional[str] = Field(
+        None,
+        description="Author name to filter ADRs by (e.g., 'Mr X', 'John Doe').",
+    )
+    status: Optional[str] = Field(
+        None,
+        description="ADR status to filter by (e.g., 'Accepted', 'Superseded', 'Proposed').",
+    )
+    date_from: Optional[str] = Field(
+        None,
+        description="Start date for date range filter (format: YYYY-MM-DD or YYYY).",
+    )
+    date_to: Optional[str] = Field(
+        None,
+        description="End date for date range filter (format: YYYY-MM-DD or YYYY).",
+    )
+    query_type: Optional[str] = Field(
+        None,
+        description="Type of query: 'list' (list all ADRs), 'filter' (metadata-only), 'semantic' (semantic search), 'hybrid' (default).",
     )
 
 

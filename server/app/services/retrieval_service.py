@@ -1,29 +1,58 @@
+"""
+Retrieval service that provides true hybrid search capabilities.
+Combines vector similarity, BM25 keyword search, and metadata filtering.
+"""
 from langchain_chroma import Chroma
 from langchain_core.retrievers import BaseRetriever
 from typing import Dict, List, Any, Optional
 from app.config.settings import settings
+from app.services.hybrid_retriever import HybridRetriever
+from app.services.query_classifier import QueryClassifier
 
 
 def get_hybrid_retriever(
-    vector_store: Chroma, query_intent: Dict[str, Any]
+    vector_store: Chroma, query_intent: Dict[str, Any], query: Optional[str] = None
 ) -> BaseRetriever:
     """
-    Creates and returns a retriever with a dynamic metadata filter.
-    Handles multiple filter conditions by using boolean flags and logical operators.
+    Creates and returns a true hybrid retriever that combines:
+    - Vector similarity search (semantic)
+    - BM25 keyword search (sparse)
+    - Metadata filtering
+    - Reciprocal Rank Fusion (RRF) for result merging
 
     Args:
         vector_store: The Chroma vector store instance
         query_intent: Dictionary containing extracted query intent with keys like
-                     'technologies', 'domain', etc.
+                     'technologies', 'domain', 'author', 'status', 'date_from', 'date_to', etc.
+        query: Optional query string for query type classification
 
     Returns:
-        A configured BaseRetriever instance with metadata filters applied
+        A HybridRetriever instance configured for the query
+    """
+    # Classify query type if not already set
+    if not query_intent.get("query_type") and query:
+        classifier = QueryClassifier()
+        query_type = classifier.classify_query(query)
+        query_intent["query_type"] = query_type
+
+    # Use true hybrid search if enabled, otherwise fall back to simple vector search
+    if settings.HYBRID_SEARCH_ENABLED:
+        return HybridRetriever(vector_store=vector_store, query_intent=query_intent)
+    else:
+        # Fallback to simple vector search with metadata filters (legacy behavior)
+        return _get_simple_retriever(vector_store, query_intent)
+
+
+def _get_simple_retriever(
+    vector_store: Chroma, query_intent: Dict[str, Any]
+) -> BaseRetriever:
+    """
+    Legacy simple retriever with metadata filtering only.
+    Used when hybrid search is disabled.
     """
     filter_conditions: List[Dict[str, Any]] = []
 
     # Filter by technologies using boolean flags
-    # Example: If technologies are ['kafka', 'sqs'], this will create
-    # {'tech_kafka': {'$eq': True}} and {'tech_sqs': {'$eq': True}}
     if query_intent.get("technologies"):
         technologies: List[str] = query_intent["technologies"]
         for tech in technologies:
@@ -35,16 +64,11 @@ def get_hybrid_retriever(
         filter_conditions.append({"domain": {"$eq": domain}})
 
     # Combine all conditions with a logical $and
-    # This is critical for robustly filtering by multiple criteria (e.g., tech AND domain)
     combined_filter: Optional[Dict[str, Any]] = None
     if len(filter_conditions) > 1:
-        # The "$and" operator requires a list with two or more conditions
         combined_filter = {"$and": filter_conditions}
     elif len(filter_conditions) == 1:
-        # If there's only one condition, it can be passed directly
         combined_filter = filter_conditions[0]
-
-    # Otherwise, combined_filter remains None, meaning no filters are applied.
 
     # Create the retriever with the dynamic filter
     retriever = vector_store.as_retriever(

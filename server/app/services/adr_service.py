@@ -185,7 +185,12 @@ class ADRService:
             )
 
         # Step 2: Perform hybrid retrieval based on the extracted intent
-        retriever = get_hybrid_retriever(self.vector_store, intent_info.model_dump())
+        # Pass query for query type classification if not already set
+        intent_dict = intent_info.model_dump()
+        if not intent_dict.get("query_type"):
+            # Query type will be classified in get_hybrid_retriever
+            pass
+        retriever = get_hybrid_retriever(self.vector_store, intent_dict, query=query)
         retrieved_docs = retriever.invoke(query)
 
         # If no results, generate a helpful "no results" response

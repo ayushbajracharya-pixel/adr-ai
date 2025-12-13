@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     # Retrieval Configuration
     RETRIEVAL_K: int = 5  # Number of documents to retrieve
     RETRIEVAL_SEARCH_TYPE: str = "similarity"  # Search type for retrieval
+    HYBRID_SEARCH_ENABLED: bool = True  # Enable true hybrid search (vector + BM25)
+    BM25_K: int = 10  # Number of documents to retrieve from BM25 search
+    VECTOR_K: int = 10  # Number of documents to retrieve from vector search
+    RRF_K: int = 60  # Reciprocal Rank Fusion parameter (typical: 60)
+    LIST_QUERY_LIMIT: int = 50  # Max documents to return for list queries
 
     # Text Splitting Configuration
     CHUNK_SIZE: int = 1000  # Character size for document chunks

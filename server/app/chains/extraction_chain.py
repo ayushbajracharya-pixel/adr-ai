@@ -6,6 +6,7 @@ from typing import Dict, Any
 
 from app.models.schemas import ADRMetadata, QueryIntent
 from app.config.settings import settings
+from datetime import datetime
 
 
 class ExtractionChain:
@@ -43,7 +44,19 @@ class ExtractionChain:
         Returns:
             QueryIntent object containing extracted technologies, requirements, etc.
         """
-        return self.intent_chain.invoke({"query": query})
+        intent = self.intent_chain.invoke({"query": query})
+        
+        # Post-process date ranges for relative dates
+        if intent.date_from and "last year" in query.lower():
+            current_year = datetime.now().year
+            intent.date_from = str(current_year - 1)
+            intent.date_to = str(current_year - 1)
+        elif intent.date_from and "this year" in query.lower():
+            current_year = datetime.now().year
+            intent.date_from = str(current_year)
+            intent.date_to = str(current_year)
+        
+        return intent
 
     def invoke_metadata_chain(self, text: str) -> ADRMetadata:
         """
@@ -72,11 +85,38 @@ class ExtractionChain:
             [
                 (
                     "system",
-                    """You are an expert project analyst. Analyze the user's project query and extract the key intent into a JSON object. 
-                    Return the output only in the specified JSON format. If a category is not mentioned, return an empty list or null as appropriate. 
+                    """You are an expert project analyst. Analyze the user's query and extract the key intent into a JSON object.
+                    
+                    Extract the following information:
+                    - Technologies: List of technologies mentioned or inferred (e.g., "kafka", "PostgreSQL", "React")
+                    - Requirements: Technical or business requirements mentioned
+                    - Domain: Industry or domain (e.g., "healthcare", "finance", "e-commerce")
+                    - Compliance needs: Regulatory requirements (e.g., "HIPAA", "GDPR", "PCI-DSS")
+                    - Use case: Primary use case of the application
+                    
+                    Metadata filters (extract if mentioned):
+                    - Author: Author name (e.g., "Mr X", "John Doe", "Jane Smith")
+                    - Status: ADR status (e.g., "Accepted", "Proposed", "Superseded", "Rejected")
+                    - Date ranges: Extract date_from and date_to from phrases like:
+                      * "in 2024" → date_from: "2024", date_to: "2024"
+                      * "last year" → date_from: "2023", date_to: "2023" (adjust based on current year)
+                      * "between 2023 and 2024" → date_from: "2023", date_to: "2024"
+                      * "after 2023" → date_from: "2023", date_to: null
+                      * "before 2024" → date_from: null, date_to: "2024"
+                      * "in the last year" → calculate from current date
+                    - Query type: Determine if this is a "list", "filter", "semantic", or "hybrid" query
+                    
+                    Examples:
+                    - "What ADRs do we have?" → query_type: "list"
+                    - "List accepted ADRs" → query_type: "list", status: "Accepted"
+                    - "ADRs by author John Doe" → query_type: "filter", author: "John Doe"
+                    - "Have you considered kafka in past projects in 2024?" → query_type: "hybrid", technologies: ["kafka"], date_from: "2024", date_to: "2024"
+                    - "What database should we use?" → query_type: "semantic"
+                    
+                    Return the output only in the specified JSON format. If a category is not mentioned, return an empty list or null as appropriate.
                     The user's query may contain implied technologies and requirements, so infer them where possible.\n\n{format_instructions}""",
                 ),
-                ("human", "Analyze this project query:\n\n{query}"),
+                ("human", "Analyze this query:\n\n{query}"),
             ]
         ).partial(format_instructions=parser.get_format_instructions())
 
