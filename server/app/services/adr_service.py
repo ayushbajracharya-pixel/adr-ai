@@ -226,8 +226,8 @@ class ADRService:
         # Clean up newline characters from the HTML response
         response_text = self._clean_html_response(response_text)
 
-        # Step 5: Process and format the references
-        references = self._create_enhanced_references(retrieved_docs)
+        # Step 5: Process and format the references (filter for relevance)
+        references = self._create_enhanced_references(retrieved_docs, query=query)
 
         # Combine the generated response and references
         return {"query": query, "response": response_text, "references": references}
@@ -422,9 +422,12 @@ class ADRService:
         return formatted
 
     def _create_enhanced_references(
-        self, docs: List[Document]
+        self, docs: List[Document], query: Optional[str] = None
     ) -> List[Dict[str, str]]:
-        """Creates unique, detailed references from retrieved documents."""
+        """
+        Creates unique, detailed references from retrieved documents.
+        Filters references to only include documents that are actually relevant to the query.
+        """
         references: List[Dict[str, str]] = []
         seen_files: Set[str] = set()
 
@@ -434,6 +437,10 @@ class ADRService:
             if doc.metadata.get("filename") not in seen_files:
                 unique_docs.append(doc)
                 seen_files.add(doc.metadata.get("filename"))
+
+        # Filter references based on relevance to the query if query is provided
+        if query and unique_docs:
+            unique_docs = self._filter_relevant_references(query, unique_docs)
 
         for doc in unique_docs:
             metadata: Dict[str, Any] = doc.metadata
@@ -471,6 +478,108 @@ class ADRService:
             }
             references.append(ref)
         return references
+
+    def _filter_relevant_references(
+        self, query: str, docs: List[Document]
+    ) -> List[Document]:
+        """
+        Filters documents to only include those that are actually relevant to the query.
+        Uses LLM to determine relevance based on document title, content preview, and metadata.
+        """
+        if not docs:
+            return docs
+
+        # If only one document, include it (no need to filter)
+        if len(docs) == 1:
+            return docs
+
+        # Build a summary of each document for relevance checking
+        doc_summaries = []
+        for i, doc in enumerate(docs):
+            metadata = doc.metadata
+            title = metadata.get("title", "Unknown Title")
+            adr_number = metadata.get("adr_number", "Unknown")
+            # Get a preview of the content (first 200 chars)
+            content_preview = doc.page_content[:200] if doc.page_content else ""
+            
+            # Get technologies mentioned in the document
+            technologies = []
+            for key, value in metadata.items():
+                if key.startswith("tech_") and value is True:
+                    tech_name = key.replace("tech_", "").replace("_", " ").title()
+                    technologies.append(tech_name)
+            
+            doc_summaries.append({
+                "index": i,
+                "title": title,
+                "adr_number": adr_number,
+                "content_preview": content_preview,
+                "technologies": ", ".join(technologies) if technologies else "None specified"
+            })
+
+        # Create a prompt to determine which documents are relevant
+        relevance_prompt = f"""
+            You are a relevance filter for an Architecture Decision Records (ADRs) knowledge base system.
+
+            User Query: "{query}"
+
+            Below are summaries of documents that were retrieved. Your task is to identify which documents are ACTUALLY RELEVANT to the user's query.
+
+            Document Summaries:
+            """
+        for summary in doc_summaries:
+            relevance_prompt += f"""
+            [{summary['index']}] ADR {summary['adr_number']}: {summary['title']}
+            Technologies: {summary['technologies']}
+            Content Preview: {summary['content_preview']}...
+            """
+
+            relevance_prompt += """
+            Instructions:
+            - A document is RELEVANT if it directly addresses the user's query topic, technologies, or use case
+            - A document is NOT RELEVANT if it only matches on generic keywords but doesn't actually relate to the query
+            - Be strict: only include documents that are clearly relevant to the query
+            - Consider the document title, technologies, and content preview when making your decision
+
+            Respond with ONLY a comma-separated list of document indices (0-based) that are relevant to the query.
+            For example, if documents 0, 2, and 3 are relevant, respond with: 0,2,3
+            If no documents are relevant, respond with: none
+            """
+
+        try:
+            relevance_chain = (
+                ChatPromptTemplate.from_template(relevance_prompt)
+                | self.llm
+                | StrOutputParser()
+            )
+            relevance_response = relevance_chain.invoke({}).strip().lower()
+            
+            # Parse the response
+            if "none" in relevance_response or not relevance_response:
+                # If no documents are relevant, return empty list
+                # But this is unlikely, so we'll return at least the first document as a fallback
+                return docs[:1]
+            
+            # Extract indices
+            try:
+                indices = [int(idx.strip()) for idx in relevance_response.split(",") if idx.strip().isdigit()]
+                # Filter documents based on relevant indices
+                relevant_docs = [docs[i] for i in indices if 0 <= i < len(docs)]
+                
+                # If filtering resulted in no documents, return at least the first one as fallback
+                if not relevant_docs:
+                    return docs[:1]
+                
+                return relevant_docs
+            except (ValueError, IndexError) as e:
+                print(f"Error parsing relevance filter response: {e}. Response: {relevance_response}")
+                # Fallback: return all documents if parsing fails
+                return docs
+                
+        except Exception as e:
+            print(f"Error in relevance filtering: {e}. Returning all documents.")
+            # Fallback: return all documents if LLM filtering fails
+            return docs
 
     def _validate_query_quality(
         self,

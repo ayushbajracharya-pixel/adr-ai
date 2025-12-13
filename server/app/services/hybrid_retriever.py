@@ -15,6 +15,8 @@ from pydantic import ConfigDict
 from datetime import datetime
 
 from app.config.settings import settings
+from app.utils.text_cleaner import normalize_technology_name, normalize_domain, normalize_status
+from app.utils.text_cleaner import normalize_technology_name
 
 
 class HybridRetriever(BaseRetriever):
@@ -321,23 +323,27 @@ class HybridRetriever(BaseRetriever):
         filter_conditions: List[Dict[str, Any]] = []
 
         # Technology filters (one-hot encoded)
+        # Use the same normalization as during storage to ensure consistent matching
         if self.query_intent.get("technologies"):
             technologies: List[str] = self.query_intent["technologies"]
             for tech in technologies:
-                filter_conditions.append({f"tech_{tech.lower()}": {"$eq": True}})
+                normalized_tech = normalize_technology_name(tech)
+                filter_conditions.append({f"tech_{normalized_tech}": {"$eq": True}})
 
-        # Domain filter
+        # Domain filter - normalize for consistent matching
         if self.query_intent.get("domain"):
             domain: str = self.query_intent["domain"]
-            filter_conditions.append({"domain": {"$eq": domain}})
+            normalized_domain = normalize_domain(domain)
+            filter_conditions.append({"domain": {"$eq": normalized_domain}})
 
         # Note: Author filter is NOT included here - it's applied post-retrieval
         # ChromaDB doesn't support $regex, so we filter by author in Python
 
-        # Status filter
+        # Status filter - normalize for consistent matching
         if self.query_intent.get("status"):
             status: str = self.query_intent["status"]
-            filter_conditions.append({"status": {"$eq": status}})
+            normalized_status = normalize_status(status)
+            filter_conditions.append({"status": {"$eq": normalized_status}})
 
         # Date range filters with validation
         date_filters = []

@@ -1,15 +1,26 @@
+import { useState } from "react";
 import { ChatMessage as ChatMessageType } from "@/hooks/useChat";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { User, Bot, FileText } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { User, Bot, FileText, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ChatMessageProps {
   message: ChatMessageType;
 }
 
+const INITIAL_REFERENCES_LIMIT = 3;
+
 export const ChatMessage = ({ message }: ChatMessageProps) => {
   const isUser = message.type === "user";
+  const [showAllReferences, setShowAllReferences] = useState(false);
+  
+  const references = message.references || [];
+  const hasMoreReferences = references.length > INITIAL_REFERENCES_LIMIT;
+  const displayedReferences = showAllReferences 
+    ? references 
+    : references.slice(0, INITIAL_REFERENCES_LIMIT);
 
   return (
     <div
@@ -41,17 +52,20 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
             className="whitespace-pre-wrap break-words"
           />
 
-          {message.references && message.references.length > 0 && (
+          {references.length > 0 && (
             <div className="mt-4 pt-3 border-t border-border">
               <div className="flex items-center gap-2 mb-2">
                 <FileText className="w-4 h-4" />
-                <span className="text-sm font-medium">References</span>
+                <span className="text-sm font-medium">
+                  References {references.length > 1 && `(${references.length})`}
+                </span>
               </div>
               <div className="flex flex-wrap gap-2">
-                {message.references.map((ref, index) => (
+                {displayedReferences.map((ref, index) => (
                   <a
                     href={ref.public_url}
                     target="_blank"
+                    rel="noopener noreferrer"
                     key={`${ref.public_url}_${index}`}
                   >
                     <Badge variant="secondary" className="text-xs">
@@ -60,6 +74,26 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
                   </a>
                 ))}
               </div>
+              {hasMoreReferences && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowAllReferences(!showAllReferences)}
+                  className="mt-2 h-8 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  {showAllReferences ? (
+                    <>
+                      <ChevronUp className="w-3 h-3" />
+                      Show Less
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="w-3 h-3" />
+                      Show More ({references.length - INITIAL_REFERENCES_LIMIT} more)
+                    </>
+                  )}
+                </Button>
+              )}
             </div>
           )}
         </div>
