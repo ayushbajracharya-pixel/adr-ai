@@ -144,7 +144,10 @@ const Index = () => {
         <SidebarContent>
           <SidebarMenu>
             {conversationsLoading ? (
-              <div className="p-4 text-sm text-muted-foreground">Loading...</div>
+              <div className="p-4 flex flex-col items-center justify-center">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mb-2"></div>
+                <div className="text-sm text-muted-foreground">Loading conversations...</div>
+              </div>
             ) : conversations.length === 0 ? (
               <div className="p-4 text-sm text-muted-foreground text-center">
                 No conversations yet. Start a new one!
