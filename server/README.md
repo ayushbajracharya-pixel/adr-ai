@@ -43,13 +43,30 @@ This project has been migrated from Poetry to UV. If you're setting up the proje
 ```text
 server/
   app/
-    chains/
-    config/
-    constants/
-    models/
-    services/
-    utils/
-    main.py
+    api/              # API routes and dependencies
+      v1/
+        routes/       # Route handlers (auth, conversations, files, query, upload)
+        schemas/      # API request/response schemas
+    core/             # Core application components
+      config.py       # Settings and configuration
+      database.py     # Database session management
+      security.py     # JWT and authentication utilities
+      exceptions.py   # Custom exception classes
+    domain/           # Domain models and schemas
+      models/         # Database models (Conversation, Message)
+      schemas/        # Domain schemas (QueryIntent, ADRMetadata)
+    infrastructure/   # External service integrations
+      llm/            # LLM chains (extraction, generation)
+      retrieval/      # Hybrid retrieval system (vector + BM25)
+      vector_db/      # Vector database integration
+    middleware/       # Request middleware (auth, CORS)
+    services/         # Business logic services
+      adr/            # ADR processing and querying
+      auth/           # Authentication services
+      conversation/    # Conversation management
+      storage/        # S3 storage operations
+    utils/            # Utility functions
+    main.py           # FastAPI application entry point
   docker-compose.yml
   docker-compose.debug.yml
   Dockerfile
@@ -94,10 +111,32 @@ LANGCHAIN_TRACING_V2=true
 LANGCHAIN_ENDPOINT=https://api.smith.langchain.com
 LANGCHAIN_API_KEY=your-langsmith-api-key
 LANGCHAIN_PROJECT=adr-ai
+
+# LLM Configuration (Optional - defaults shown)
+LLM_MODEL_NAME=gpt-4.1-nano
+LLM_TEMPERATURE=0.1
+EXTRACTION_MODEL_NAME=gpt-4.1-nano
+EXTRACTION_TEMPERATURE=0.0
+
+# Retrieval Configuration (Optional - defaults shown)
+RETRIEVAL_K=5
+HYBRID_SEARCH_ENABLED=true
+BM25_K=10
+VECTOR_K=10
+RRF_K=60
+LIST_QUERY_LIMIT=50
+
+# Text Splitting Configuration (Optional - defaults shown)
+CHUNK_SIZE=1000
+CHUNK_OVERLAP=200
+
+# Conversation History Configuration (Optional - defaults shown)
+CONVERSATION_HISTORY_LIMIT=10
+MESSAGE_TRUNCATE_LENGTH=500
 ```
 
 Notes:
-- `.env` is loaded by `docker-compose.yml` and `app/config/settings.py`.
+- `.env` is loaded by `docker-compose.yml` and `app/core/config.py`.
 - **ChromaDB Configuration:**
   - When running locally (outside Docker): Set `CHROMADB_HOST=localhost` and `CHROMADB_PORT=8001` to connect to the ChromaDB container running on the host port.
   - When running in Docker: Use defaults (`CHROMADB_HOST=chromadb` and `CHROMADB_PORT=8000`) to connect via Docker service name.
@@ -131,16 +170,121 @@ Notes:
   4. Add the API key and project name to your `.env` file
   5. Set `LANGCHAIN_TRACING_V2=true` to enable tracing
 
+- **Configuration Options:**
+  - LLM settings: Model names and temperatures for query generation and extraction
+  - Retrieval settings: Hybrid search parameters, retrieval counts, RRF configuration
+  - Text processing: Chunk size and overlap for document splitting
+  - Conversation settings: History limits and message truncation lengths
+  - All configuration options have sensible defaults and are optional
+
 ---
 
 ## Features
 
-- **Conversation Management**: Users can create, view, update, and delete conversations
-- **Message History**: All messages are stored in PostgreSQL with conversation context
-- **Context-Aware Responses**: AI responses use conversation history for better context
-- **LocalStack Integration**: Local AWS S3 emulation for development
-- **LangSmith Observability**: Monitor and debug LLM calls in real-time
-- **PostgreSQL Storage**: Persistent storage for conversations and messages
+### Core Functionality
+- **Document Processing**: Upload and process ADR documents (PDF, DOCX, TXT, MD) with automatic text extraction and metadata extraction using LLM
+- **Intelligent Query System**: Natural language queries with intent extraction, hybrid retrieval (semantic + BM25 + metadata filtering), and contextual response generation
+- **Conversation Management**: Multi-threaded conversations with persistent message history, context-aware responses, and full CRUD operations
+- **Authentication**: Google OAuth 2.0 with domain restriction (@lftechnology.com) and JWT-based API authentication
+
+### Technical Features
+- **Hybrid Search**: Combines vector similarity search, BM25 keyword search, and metadata filtering with Reciprocal Rank Fusion (RRF)
+- **Query Validation**: Intelligent query quality validation to filter out conversational fillers and non-searchable queries
+- **Metadata Extraction**: LLM-powered extraction of ADR metadata (technologies, domain, status, author, dates, etc.)
+- **Vector Storage**: ChromaDB for semantic search with intelligent document chunking
+- **File Storage**: AWS S3 integration (LocalStack for local development) with public-read access
+- **Observability**: Optional LangSmith integration for LLM call tracing and debugging
+
+---
+
+## RAG Pipeline Architecture
+
+The system implements a complete RAG (Retrieval-Augmented Generation) pipeline from document ingestion to query response. Here's how the components are connected:
+
+### Data Ingestion Pipeline
+
+```
+1. Document Upload (PDF/DOCX/TXT/MD)
+   ↓
+2. S3 Storage → File stored in S3 bucket (adr_uploads/)
+   ↓
+3. Text Extraction → DocumentProcessor extracts raw text
+   ↓
+4. Metadata Extraction → MetadataExtractor uses LLM to extract:
+   - ADR number, title, status, author, date
+   - Technologies, domain, compliance needs
+   - Decision, rationale, consequences
+   ↓
+5. Text Chunking → VectorStoreService splits text intelligently:
+   - Uses ADR section headings as separators (Context, Decision, Consequences, etc.)
+   - Configurable chunk size (default: 1000 chars) with overlap (200 chars)
+   ↓
+6. Vector Embedding → OpenAI embeddings generated for each chunk
+   ↓
+7. ChromaDB Storage → Chunks stored with:
+   - Vector embeddings (for semantic search)
+   - Metadata (for filtering)
+   - Original text (for context in responses)
+```
+
+### Query & Retrieval Pipeline
+
+```
+1. User Query → Natural language question
+   ↓
+2. Query Validation → QueryProcessor validates:
+   - Filters conversational fillers ("thanks", "ok", etc.)
+   - Identifies searchable vs. conversational queries
+   ↓
+3. Intent Extraction → LLM extracts query intent:
+   - Technologies mentioned
+   - Domain/industry context
+   - Requirements and compliance needs
+   - Metadata filters (author, status, date ranges)
+   - Query type (list, filter, semantic, hybrid)
+   ↓
+4. Hybrid Retrieval → HybridRetriever performs:
+   a) Vector Search (Semantic):
+      - Embed query → Find similar chunks via cosine similarity
+   b) BM25 Search (Keyword):
+      - Tokenize query → Rank documents by keyword relevance
+   c) Metadata Filtering:
+      - Apply filters (technologies, status, author, dates, etc.)
+   d) Reciprocal Rank Fusion (RRF):
+      - Merge results from vector + BM25 searches
+      - Apply metadata filters
+      - Rank final results
+   ↓
+5. Response Generation → ResponseGenerator:
+   - Combines retrieved chunks with query and conversation history
+   - Generates contextual response using LLM
+   - Formats response as HTML with proper structure
+   ↓
+6. Reference Creation → Extracts source information:
+   - ADR titles, filenames, relevant sections
+   - Links to original documents (S3 URLs)
+   ↓
+7. Return Response → JSON with:
+   - Query, response text (HTML), references array
+```
+
+### Key Components
+
+- **ADRService**: Main orchestrator coordinating all services
+- **DocumentProcessor**: Handles file format parsing and text extraction
+- **MetadataExtractor**: LLM-powered structured metadata extraction
+- **VectorStoreService**: Manages ChromaDB operations and intelligent chunking
+- **QueryProcessor**: Validates queries, extracts intent, performs retrieval
+- **HybridRetriever**: Combines vector, BM25, and metadata filtering
+- **ResponseGenerator**: Creates contextual, formatted responses
+
+### Conversation Context
+
+When queries include conversation history:
+- Last 10 messages are included in the prompt (configurable)
+- Messages are truncated to 500 chars each (configurable)
+- Context helps generate more relevant, contextual responses
+- Conversation history stored in PostgreSQL for persistence
 
 ---
 

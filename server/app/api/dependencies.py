@@ -1,37 +1,22 @@
-from fastapi import Request, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from app.core.security import verify_token
+"""FastAPI dependencies."""
+from fastapi import Depends, HTTPException, status, Header
 from typing import Optional
+from sqlalchemy.ext.asyncio import AsyncSession
 
-security = HTTPBearer()
-
-
-async def get_current_user_optional(request: Request) -> Optional[dict]:
-    """Get current user from token if present (optional authentication)"""
-    authorization = request.headers.get("Authorization")
-    if not authorization:
-        return None
-    
-    try:
-        scheme, token = authorization.split()
-        if scheme.lower() != "bearer":
-            return None
-    except ValueError:
-        return None
-    
-    return verify_token(token)
+from app.core.database import get_db
+from app.core.security import verify_token
 
 
-def require_auth(request: Request) -> dict:
-    """Require authentication - raises exception if not authenticated"""
-    authorization = request.headers.get("Authorization")
+def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
+    """Dependency to get current user from token"""
     if not authorization:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
+    # Extract token from "Bearer <token>"
     try:
         scheme, token = authorization.split()
         if scheme.lower() != "bearer":
@@ -44,7 +29,7 @@ def require_auth(request: Request) -> dict:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authorization header",
         )
-    
+
     payload = verify_token(token)
     if payload is None:
         raise HTTPException(
@@ -52,6 +37,8 @@ def require_auth(request: Request) -> dict:
             detail="Invalid or expired token",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     return payload
+
+
 
