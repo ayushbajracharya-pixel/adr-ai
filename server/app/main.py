@@ -63,8 +63,9 @@ async def health_check():
 async def upload(file: UploadFile, current_user: dict = Depends(get_current_user)):
     """Upload and process ADR document"""
     try:
-        result = await adr_service.process_adr(file)
-        return {"message": "ADR processed successfully", "doc_id": result}
+        doc_ids, file_info = await adr_service.process_adr(file)
+        # Return file information in the format expected by the frontend
+        return file_info
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -1,7 +1,7 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/hooks/use-toast';
-import { fileApi } from '@/lib/api';
+import { fileApi, UploadedFileResponse } from '@/lib/api';
 
 export interface UploadedFile {
   id: string;
@@ -46,8 +46,20 @@ export const useFileUpload = () => {
   const uploadMutation = useMutation({
     mutationFn: ({ file, onProgress }: { file: File; onProgress: (progress: number) => void }) =>
       fileApi.uploadFile(file, onProgress),
-    onSuccess: () => {
+    onSuccess: (response) => {
+      // Optimistically update the query cache with the new file (in raw API response format, before select)
+      queryClient.setQueryData<UploadedFileResponse[]>(['uploadedFiles'], (oldFiles = []) => {
+        // Check if file already exists to avoid duplicates
+        const exists = oldFiles.some(f => f.object_key === response.object_key || f.filename === response.filename);
+        if (exists) {
+          return oldFiles;
+        }
+        return [...oldFiles, response];
+      });
+      
+      // Then invalidate to refetch and confirm
       queryClient.invalidateQueries({ queryKey: ['uploadedFiles'] });
+      
       toast({
         title: "File uploaded",
         description: "File uploaded successfully to server",
@@ -83,9 +95,36 @@ export const useFileUpload = () => {
     },
   });
 
-  // Combine local and server files
+  // Remove local files that have appeared in serverFiles
+  useEffect(() => {
+    if (serverFiles.length > 0 && localFiles.length > 0) {
+      setLocalFiles(prev => {
+        const serverFileNames = new Set(serverFiles.map(f => f.name));
+        return prev.filter(localFile => {
+          // Keep if still uploading, otherwise remove if it's in serverFiles
+          return localFile.isUploading || !serverFileNames.has(localFile.name);
+        });
+      });
+    }
+  }, [serverFiles]);
+
+  // Combine local and server files, avoiding duplicates
   const uploadedFiles = useMemo(() => {
-    return [...localFiles, ...(serverFiles.map(item => item.object_key === deletingFileObjectKey ? {...item, isDeleting: true} : item) || [])]
+    const serverFileNames = new Set(serverFiles.map(f => f.name));
+    
+    // Only show local files that don't exist in serverFiles yet
+    const activeLocalFiles = localFiles.filter(localFile => {
+      return !serverFileNames.has(localFile.name);
+    });
+    
+    // Combine with server files, marking deleting ones
+    const processedServerFiles = serverFiles.map(item => 
+      item.object_key === deletingFileObjectKey 
+        ? {...item, isDeleting: true} 
+        : item
+    );
+    
+    return [...activeLocalFiles, ...processedServerFiles];
   }, [localFiles, serverFiles, deletingFileObjectKey])
 
   const validateFile = useCallback((file: File): string | null => {
@@ -135,9 +174,13 @@ export const useFileUpload = () => {
         ));
       }
     }, {
-      onSuccess: () => {
-      // Remove from local files as it will come from server files
-        setLocalFiles(prev => prev.filter(f => f.id !== tempId));
+      onSuccess: (response) => {
+        // Mark as not uploading but keep in localFiles until it appears in serverFiles
+        setLocalFiles(prev => prev.map(f => 
+          f.id === tempId 
+            ? { ...f, isUploading: false, uploadProgress: 100 }
+            : f
+        ));
       },
       onError: () => {
         // Remove failed upload from local files

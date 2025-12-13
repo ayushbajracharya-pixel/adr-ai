@@ -16,7 +16,8 @@ from app.utils.text_cleaner import (
 import pypdfium2 as pdfium
 import docx
 from io import BytesIO
-from typing import Dict, List, Optional, Any, Union, Set
+from typing import Dict, List, Optional, Any, Union, Set, Tuple
+from datetime import datetime
 from botocore.exceptions import ClientError
 
 from app.config.settings import settings
@@ -49,7 +50,7 @@ class ADRService:
         self.extraction_chain = ExtractionChain()
         self.uploader_service = UploaderService()
 
-    async def process_adr(self, file: UploadFile) -> List[str]:
+    async def process_adr(self, file: UploadFile) -> Tuple[List[str], Dict[str, Any]]:
         """
         Process uploaded ADR and add to knowledge base.
 
@@ -57,7 +58,7 @@ class ADRService:
             file: The uploaded file to process
 
         Returns:
-            List of document IDs added to the vector store
+            Tuple of (List of document IDs added to the vector store, File information dict)
 
         Raises:
             HTTPException: If any step of processing fails
@@ -145,8 +146,17 @@ class ADRService:
 
             doc_ids = self.vector_store.add_documents(splits)
 
-            # Return all document IDs
-            return doc_ids
+            # Prepare file information for response
+            file_info = {
+                "object_key": s3_object_name,
+                "filename": file_name,
+                "size_bytes": len(content),
+                "last_modified": datetime.utcnow().isoformat() + "+00:00",
+                "permanent_url": public_url
+            }
+
+            # Return document IDs and file information
+            return doc_ids, file_info
 
         except Exception as e:
             # Handle failures during vector store indexing

@@ -20,7 +20,6 @@ const formatFileSize = (bytes: number): string => {
 };
 
 const getFileIcon = (fileName: string) => {
-  const extension = fileName.split(".").pop()?.toLowerCase();
   return <FileText className="h-5 w-5 text-primary" />;
 };
 
@@ -28,7 +27,7 @@ const getFileTypeBadge = (fileName: string) => {
   const extension = fileName.split(".").pop()?.toLowerCase();
   return (
     <Badge variant="secondary" className="text-xs">
-      {extension?.toUpperCase()}
+      {extension?.toUpperCase() || "FILE"}
     </Badge>
   );
 };
@@ -38,16 +37,7 @@ export const FileList = ({
   onRemove,
   isLoading = false,
 }: FileListProps) => {
-  if (isLoading) {
-    return (
-      <div className="text-center py-12">
-        <Loader2 className="h-12 w-12 text-muted-foreground mx-auto mb-4 animate-spin" />
-        <p className="text-muted-foreground">Loading files...</p>
-      </div>
-    );
-  }
-
-  if (files.length === 0) {
+  if (files.length === 0 && !isLoading) {
     return (
       <div className="text-center py-12">
         <File className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
@@ -62,9 +52,10 @@ export const FileList = ({
         Uploaded Files ({files.length})
       </h3>
 
-      {files.map((file) => (
-        <a key={file.id} target="_blank" href={file.public_url}>
-          <Card className="p-4 hover:shadow-md transition-shadow cursor-pointer">
+      {files.map((file) => {
+        // Don't make it a link if file is still uploading or doesn't have a URL yet
+        const fileContent = (
+          <Card className={`p-4 transition-shadow ${file.public_url && !file.isUploading ? 'hover:shadow-md cursor-pointer' : ''}`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3 flex-1 min-w-0">
                 {file.isUploading || file.isDeleting ? (
@@ -122,8 +113,19 @@ export const FileList = ({
               </Button>
             </div>
           </Card>
-        </a>
-      ))}
+        );
+
+        // Only wrap in link if file has a public URL and is not uploading
+        if (file.public_url && !file.isUploading) {
+          return (
+            <a key={file.id} target="_blank" href={file.public_url} rel="noopener noreferrer">
+              {fileContent}
+            </a>
+          );
+        }
+
+        return <div key={file.id}>{fileContent}</div>;
+      })}
     </div>
   );
 };
